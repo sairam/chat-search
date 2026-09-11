@@ -187,11 +187,18 @@ class Store:
                 conn.execute("ALTER TABLE sessions ADD COLUMN owner TEXT NOT NULL DEFAULT 'local'")
             ddl = conn.execute("SELECT sql FROM sqlite_master WHERE name = 'sessions'").fetchone()
             if ddl and "UNIQUE" in ddl[0]:            # sha256 used to be globally unique; it is per owner now
+                # RENAME also rewrites messages' FK to point at sessions_old, so the
+                # DROP would cascade-delete every message: do it with FKs off and
+                # rebuild the child table's FK by recreating messages from a copy.
                 conn.executescript("""
+                    PRAGMA foreign_keys = OFF;
+                    PRAGMA legacy_alter_table = ON;
                     ALTER TABLE sessions RENAME TO sessions_old;
                     %s
                     INSERT INTO sessions SELECT * FROM sessions_old;
-                    DROP TABLE sessions_old;""" % SCHEMA.split("CREATE UNIQUE INDEX")[0])
+                    DROP TABLE sessions_old;
+                    PRAGMA legacy_alter_table = OFF;
+                    PRAGMA foreign_keys = ON;""" % SCHEMA.split("CREATE UNIQUE INDEX")[0])
             conn.executescript(SCHEMA)
 
     def db(self) -> sqlite3.Connection:
