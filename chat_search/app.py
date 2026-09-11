@@ -50,12 +50,14 @@ class Settings:
 def create_app(settings: Settings | None = None, *,
                identity: Callable[[Request], str | None] | None = None,
                quota: Callable[[str], int | None] | None = None,
+               is_admin: Callable[[str], bool] | None = None,
                anonymous_home: Callable[[Request], Response] | None = None,
                login_url: str | None = None,
                template_dirs: tuple = (),
                nav_links: tuple = ()) -> FastAPI:
     """identity(request) -> user name or None (not signed in).
     quota(user) -> byte limit for that user, or None for unlimited.
+    is_admin(user) -> may see every session (default: Settings.admins).
     anonymous_home(request) -> page to show on / when not signed in.
     login_url: where an unauthenticated browser is redirected (else 401)."""
     st = settings or Settings()
@@ -89,7 +91,11 @@ def create_app(settings: Settings | None = None, *,
             raise Unauthenticated()
         return user
 
+    _admin_override = is_admin
+
     def is_admin(user: str) -> bool:
+        if _admin_override is not None:
+            return bool(_admin_override(user))
         return user in st.admins or (st.auth == "none" and user == "local")
 
     def _scope(user: str):

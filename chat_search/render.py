@@ -55,7 +55,7 @@ def human_bytes(n) -> str:
     n = float(n or 0)
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024 or unit == "GB":
-            return "%.0f %s" % (n, unit) if unit == "B" else "%.1f %s" % (n, unit)
+            return "%.0f %s" % (n, unit) if unit == "B" else ("%.1f" % n).rstrip("0").rstrip(".") + " " + unit
         n /= 1024
     return str(n)
 

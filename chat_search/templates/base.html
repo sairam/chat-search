@@ -61,20 +61,22 @@ details .body { max-height: none; }
 .hidden-kind { display:none !important; }
 .meter { display:inline-block; width:120px; height:8px; border:1px solid var(--line); border-radius:4px; vertical-align:middle; overflow:hidden; background:var(--card); }
 .meter span { display:block; height:100%; background:var(--accent); }
+button.link { background:none; border:0; padding:0; color:var(--accent); cursor:pointer; font:inherit; font-size:12px; }
 .flash { background:var(--assistant); border:1px solid var(--line); padding:8px 12px; border-radius:6px; margin-bottom:12px; }
 </style>
 </head>
 <body>
 <header>
   <a class="brand" href="/">{{ brand }}</a>
-  <form action="/search" method="get">
+  {% if user %}<form action="/search" method="get">
     <input type="search" name="q" value="{{ q or '' }}" placeholder="search all sessions — words are ANDed, &quot;quote a phrase&quot;, trailing * for prefix" autofocus>
     <button class="primary">Search</button>
-  </form>
-  {% if admin %}<a href="/local" class="small">local transcripts</a>{% endif %}
-  <a href="/token" class="small">hook / token</a>
-  {% for href, label in nav_links %}<a href="{{ href }}" class="small">{{ label }}</a>{% endfor %}
-  <span class="muted small">{{ user }}</span>
+  </form>{% else %}<span style="flex:1"></span>{% endif %}
+  {% if user %}{% if admin %}<a href="/local" class="small">local transcripts</a>{% endif %}
+  <a href="/token" class="small">hook / token</a>{% endif %}
+  {% if user %}{% for href, label in nav_links %}<a href="{{ href }}" class="small">{{ label }}</a>{% endfor %}
+  <span class="muted small">{{ user }}</span>{% endif %}
+  {% include "_nav_extra.html" ignore missing %}
 </header>
 <main>
 {% block body %}{% endblock %}
