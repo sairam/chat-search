@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}local transcripts — {{ brand }}{% endblock %}
+{% block body %}
+<h2 style="margin-top:0">Transcripts on this machine</h2>
+<p class="muted small">Everything under <span class="mono">{{ root }}</span>. Tick the ones to index — no upload needed.</p>
+<form method="post" action="/local/import">
+<table>
+  <thead><tr><th></th><th>Project</th><th>File</th><th>Modified (UTC)</th><th>Size</th><th>Indexed</th></tr></thead>
+  <tbody>
+  {% for f in files %}
+  <tr>
+    <td><input type="checkbox" name="paths" value="{{ f.path }}" {% if f.indexed %}disabled{% endif %}></td>
+    <td class="small">{{ f.project }}</td>
+    <td class="small mono">{{ f.name }}</td>
+    <td class="small">{{ f.mtime|ts }}</td>
+    <td class="small">{{ f.size|bytes }}</td>
+    <td class="small">{% if f.indexed %}yes{% elif f.indexed is none %}<span class="muted">?</span>{% else %}—{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">No transcripts found.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p><button class="primary">Index selected</button>
+   <button type="button" onclick="document.querySelectorAll('input[name=paths]:not(:disabled)').forEach(c=>c.checked=true)">select all</button></p>
+</form>
+{% endblock %}

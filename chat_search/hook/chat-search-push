@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# chat-search-push — Claude Code hook: upload the session transcript to
+# chat-search so it is rendered and searchable there.
+#
+#   As a hook (Stop / SessionEnd): reads the hook JSON on stdin, takes
+#   transcript_path, pushes it (gzip) in the background. Stop events are
+#   throttled to one push per session per 10 minutes; SessionEnd always pushes.
+#   Subagent transcripts beside the session (<session-id>/subagents/*.jsonl)
+#   go along with it.
+#
+#   Manual:  chat-search-push FILE.jsonl [...]      push these files now
+#            chat-search-push --check               verify URL + token
+#
+# Config: ~/.config/chat-search/config with CHAT_SEARCH_URL and
+# CHAT_SEARCH_TOKEN (get a token at <url>/token). Never blocks Claude:
+# failures are logged to ~/.cache/chat-search/push.log and swallowed.
+set -u
+CFG="${CHAT_SEARCH_CONFIG:-$HOME/.config/chat-search/config}"
+CACHE="$HOME/.cache/chat-search"; mkdir -p "$CACHE"
+LOG="$CACHE/push.log"
+THROTTLE="${CHAT_SEARCH_THROTTLE:-600}"
+[ -r "$CFG" ] && . "$CFG"
+: "${CHAT_SEARCH_URL:=}" "${CHAT_SEARCH_TOKEN:=}"
+
+log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >> "$LOG"; }
+
+push_one() {                       # push_one FILE  → prints server reply line
+    local f="$1" name; name=$(basename "$f")
+    [ -s "$f" ] || { log "skip empty $f"; return 0; }
+    gzip -c "$f" | curl -sS --max-time 900 --retry 3 --retry-all-errors --retry-delay 2 -X POST \
+        -H "Authorization: Bearer $CHAT_SEARCH_TOKEN" \
+        -H "Content-Type: application/x-ndjson" -H "Content-Encoding: gzip" \
+        --data-binary @- "$CHAT_SEARCH_URL/api/upload?name=$name" 2>>"$LOG"
+}
+
+push_set() {                       # push_set TRANSCRIPT  (+ its subagents)
+    local t="$1" r
+    r=$(push_one "$t"); log "$t -> ${r:-no reply}"; echo "$(basename "$t") -> ${r:-no reply}"
+    local d="${t%.jsonl}/subagents"
+    if [ -d "$d" ]; then
+        for a in "$d"/*.jsonl; do [ -e "$a" ] || continue; r=$(push_one "$a"); log "$a -> ${r:-no reply}"; echo "$(basename "$a") -> ${r:-no reply}"; done
+    fi
+}
+
+if [ -z "$CHAT_SEARCH_URL" ] || [ -z "$CHAT_SEARCH_TOKEN" ]; then
+    log "not configured ($CFG): CHAT_SEARCH_URL / CHAT_SEARCH_TOKEN"
+    [ "${1:-}" = "--check" ] && { echo "not configured: $CFG" >&2; exit 1; }
+    exit 0
+fi
+
+case "${1:-}" in
+  --check)
+    curl -fsS -H "Authorization: Bearer $CHAT_SEARCH_TOKEN" "$CHAT_SEARCH_URL/api/whoami"; echo; exit $? ;;
+  "")
+    # hook mode: JSON on stdin
+    input=$(cat)
+    tp=$(printf '%s' "$input" | sed -n 's/.*"transcript_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+    ev=$(printf '%s' "$input" | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+    [ -n "$tp" ] && [ -f "$tp" ] || { log "no transcript_path in hook input (event=$ev)"; exit 0; }
+    stamp="$CACHE/$(printf '%s' "$tp" | md5sum | cut -c1-16).last"
+    if [ "$ev" != "SessionEnd" ] && [ -f "$stamp" ]; then
+        last=$(cat "$stamp" 2>/dev/null || echo 0); now=$(date +%s)
+        [ $((now - last)) -lt "$THROTTLE" ] && exit 0
+    fi
+    date +%s > "$stamp"
+    ( push_set "$tp" ) >/dev/null 2>&1 < /dev/null &
+    disown 2>/dev/null || true
+    exit 0 ;;
+  *)
+    for f in "$@"; do push_set "$f"; done ;;
+esac

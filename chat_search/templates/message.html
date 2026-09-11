@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}#{{ m.seq }} — {{ s.title }} — {{ brand }}{% endblock %}
+{% block body %}
+<p class="muted small" style="margin:0 0 12px">
+  <a href="/session/{{ s.id }}?q={{ q|urlencode }}&around={{ m.seq }}#m{{ m.seq }}">← {{ s.title }}</a>
+  · message #{{ m.seq }} · {{ m.kind }}{% if m.tool %} · <span class="mono">{{ m.tool }}</span>{% endif %} · {{ m.ts|ts }} · {{ (m.text|length / 1000)|round|int }} kB
+</p>
+<div class="msg {{ m.kind }}{% if m.is_error %} error{% endif %}" id="m{{ m.seq }}">
+  <div class="body">{{ m.html }}</div>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+<div class="filters">
+  <label>From <input type="date" name="date_from" value="{{ date_from }}"></label>
+  <label>To <input type="date" name="date_to" value="{{ date_to }}"></label>
+  {% if sessions is defined %}
+  <label>Session
+    <select name="session">
+      <option value="">all</option>
+      {% for s in sessions %}<option value="{{ s.id }}" {% if session == s.id %}selected{% endif %}>{{ s.title[:60] }} ({{ s.first_ts|ts|truncate(10, true, '') }})</option>{% endfor %}
+    </select>
+  </label>
+  <label>Tool <input type="text" name="tool" value="{{ tool }}" placeholder="Bash, Edit, Read…" size="10"></label>
+  {% endif %}
+  <div class="kinds">
+    {% for k in KINDS %}<label><input type="checkbox" name="kind" value="{{ k }}" {% if k in kinds %}checked{% endif %}>{{ k }}</label>{% endfor %}
+  </div>
+  <button>Apply</button>
+</div>

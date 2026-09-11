@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ s.title }} — {{ brand }}{% endblock %}
+{% block body %}
+{% macro pager() %}
+{% if pages > 1 %}
+<p class="pager">
+  {% set base = "?q=" ~ (q|urlencode) ~ "&date_from=" ~ date_from ~ "&date_to=" ~ date_to %}
+  {% for k in kinds %}{% set base = base ~ "&kind=" ~ k %}{% endfor %}
+  {% if page > 1 %}<a href="{{ base }}&page=1">« first</a> <a href="{{ base }}&page={{ page - 1 }}">‹ prev</a>{% endif %}
+  <span class="muted small">page {{ page }} / {{ pages }} · messages #{{ first_seq }}–#{{ last_seq }} of {{ total }}</span>
+  {% if page < pages %}<a href="{{ base }}&page={{ page + 1 }}">next ›</a> <a href="{{ base }}&page={{ pages }}">last »</a>{% endif %}
+  <label class="small muted">go to #<input type="number" min="0" style="width:6em" onchange="location.href='{{ base }}&around='+this.value+'#m'+this.value"></label>
+</p>
+{% endif %}
+{% endmacro %}
+<h2 style="margin:0 0 4px">{{ s.title }}</h2>
+<p class="muted small" style="margin:0 0 12px">
+  <span class="mono">{{ s.session_id }}</span> · {{ s.project or '' }}{% if s.git_branch %} ({{ s.git_branch }}){% endif %}
+  · {{ s.first_ts|ts }} → {{ s.last_ts|ts }} · {{ s.n_messages }} messages · Claude Code {{ s.version or '?' }}
+  · <a href="/session/{{ s.id }}/text">plain text</a> · <a href="/session/{{ s.id }}/raw">raw jsonl</a> · <a href="/search?session={{ s.id }}">search this session</a>
+</p>
+
+<form method="get" class="card">
+  <div class="filters" style="margin-bottom:8px">
+    <label>Highlight <input type="search" name="q" value="{{ q }}" placeholder="terms to highlight"></label>
+  </div>
+  {% include "_filters.html" %}
+</form>
+
+{{ pager() }}
+<div class="toggle-bar">
+  <span class="muted small">show:</span>
+  {% for k in KINDS %}<label><input type="checkbox" data-kind="{{ k }}" checked> {{ k }}</label>{% endfor %}
+</div>
+
+{% for m in msgs %}
+<div class="msg {{ m.kind }}{% if m.is_error %} error{% endif %}{% if m.long %} collapsed{% endif %}" id="m{{ m.seq }}" data-kind="{{ m.kind }}">
+  <div class="head">
+    <span class="kind">{{ m.kind }}</span>
+    {% if m.label %}<span class="mono">{{ m.label }}</span>{% endif %}
+    {% if m.is_error %}<span style="color:#c0392b">error</span>{% endif %}
+    <span>{{ m.ts|ts }}</span>
+    <a href="#m{{ m.seq }}" class="muted">#{{ m.seq }}</a>
+  </div>
+  <div class="body">{{ m.html }}{% if m.cut %}<p class="muted small">… message is {{ (m.text|length / 1000)|round|int }} kB; only the first 60 kB shown — <a href="/session/{{ s.id }}/m/{{ m.seq }}?q={{ q|urlencode }}">open full message</a></p>{% endif %}</div>
+  {% if m.long %}<span class="expand">show all</span>{% endif %}
+</div>
+{% else %}
+<p class="muted">No messages match the filters.</p>
+{% endfor %}
+{{ pager() }}
+<script>
+document.querySelectorAll('.toggle-bar input').forEach(cb => cb.addEventListener('change', () => {
+  document.querySelectorAll('.msg[data-kind="' + cb.dataset.kind + '"]').forEach(el => el.classList.toggle('hidden-kind', !cb.checked));
+}));
+if (location.hash) { const el = document.querySelector(location.hash); if (el) { el.classList.remove('collapsed'); el.scrollIntoView(); } }
+</script>
+{% endblock %}

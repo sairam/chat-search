@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}API token — {{ brand }}{% endblock %}
+{% block body %}
+<h2 style="margin-top:0">Your upload token <span class="muted small">({{ user }})</span></h2>
+{% if new %}
+<div class="card" style="border-color:var(--accent)">
+  <p style="margin-top:0"><strong>New token — shown once.</strong> Put it in <span class="mono">~/.config/chat-search/config</span> on the machine you run Claude Code on:</p>
+  <pre>CHAT_SEARCH_URL={{ base }}
+CHAT_SEARCH_TOKEN={{ new }}</pre>
+</div>
+{% endif %}
+<div class="card">
+  {% if has_token %}<p>A token exists (issued {{ created|ts }}). Rotating replaces it; the old one stops working immediately.</p>
+  {% else %}<p>No token yet.</p>{% endif %}
+  <form method="post" action="/token/rotate"><button class="primary">{{ 'Rotate token' if has_token else 'Create token' }}</button></form>
+</div>
+<div class="card">
+  <h3 style="margin-top:0">Automatic upload from Claude Code (hook)</h3>
+  <p>Sessions push themselves here when a turn ends (throttled to once per 10 minutes) and when a session ends. On the machine running Claude Code:</p>
+  <pre>curl -fsS {{ base }}/hook/{{ hook_name }} -o ~/.local/bin/chat-search-push
+chmod +x ~/.local/bin/chat-search-push
+mkdir -p ~/.config/chat-search && printf 'CHAT_SEARCH_URL=%s\nCHAT_SEARCH_TOKEN=%s\n' '{{ base }}' '&lt;token&gt;' > ~/.config/chat-search/config
+chmod 600 ~/.config/chat-search/config
+~/.local/bin/chat-search-push --check      # prints your user name if the token works</pre>
+  <p>Then add to <span class="mono">~/.claude/settings.json</span> (merge into an existing <span class="mono">hooks</span> block if you have one):</p>
+  <pre>{
+  "hooks": {
+    "Stop":       [{ "hooks": [{ "type": "command", "command": "~/.local/bin/chat-search-push" }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "~/.local/bin/chat-search-push" }] }]
+  }
+}</pre>
+  <p class="muted small">The hook reads the transcript path from its stdin, gzips the file and POSTs it to <span class="mono">/api/upload</span> in the background — it never blocks Claude. Subagent transcripts next to the session are pushed too. Re-pushing a session replaces the copy held here, so the index always has the latest.</p>
+  <p class="muted small">Manual push of any file: <span class="mono">~/.local/bin/chat-search-push path/to/session.jsonl</span></p>
+</div>
+{% endblock %}

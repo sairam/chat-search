@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ brand }}{% endblock %}</title>
+<style>
+:root { --bg:#fafaf8; --fg:#1b1b1b; --muted:#6b6b6b; --line:#e2e0da; --card:#fff;
+        --human:#eef4ff; --assistant:#f4fbf4; --thinking:#f7f3ff; --tool:#fff8e8; --result:#f3f3f3; --system:#fdeeee;
+        --accent:#2f5fd0; --mark:#ffe680; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#151513; --fg:#e8e6e0; --muted:#9a9890; --line:#2c2b27; --card:#1d1d1a;
+          --human:#1c2740; --assistant:#1a2d1a; --thinking:#26203a; --tool:#33290f; --result:#232321; --system:#3a1d1d;
+          --accent:#7ea0ff; --mark:#7a6a00; }
+}
+* { box-sizing: border-box; }
+body { margin:0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); }
+a { color: var(--accent); }
+header { display:flex; gap:18px; align-items:center; padding:10px 20px; border-bottom:1px solid var(--line); background:var(--card); position:sticky; top:0; z-index:5; }
+header .brand { font-weight:700; text-decoration:none; color:var(--fg); }
+header form { display:flex; gap:6px; flex:1; }
+header input[type=search] { flex:1; max-width:640px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); font-size:14px; }
+main { max-width: 1180px; margin: 0 auto; padding: 18px 20px 60px; }
+button, .btn { padding:6px 12px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); cursor:pointer; font-size:13px; text-decoration:none; }
+button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+.muted { color:var(--muted); }
+.small { font-size:12px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12.5px; }
+table { border-collapse:collapse; width:100%; }
+th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin-bottom:16px; }
+.filters { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:end; }
+.filters label { display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--muted); }
+.filters input, .filters select { padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); font-size:13px; }
+.kinds { display:flex; gap:8px; flex-wrap:wrap; }
+.kinds label { flex-direction:row; align-items:center; gap:4px; font-size:13px; color:var(--fg); }
+mark { background:var(--mark); color:inherit; padding:0 1px; border-radius:2px; }
+pre { white-space:pre-wrap; word-break:break-word; margin:0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12.5px; }
+.msg { border:1px solid var(--line); border-radius:8px; margin:10px 0; overflow:hidden; }
+.msg .head { display:flex; gap:12px; align-items:center; padding:5px 12px; font-size:12px; color:var(--muted); border-bottom:1px solid var(--line); }
+.msg .head .kind { font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--fg); }
+.msg .body { padding:10px 14px; }
+.msg .body p:first-child { margin-top:0; } .msg .body p:last-child { margin-bottom:0; }
+.msg .body pre { background: rgba(0,0,0,.04); padding:8px 10px; border-radius:6px; }
+.msg.human { background:var(--human); } .msg.assistant { background:var(--assistant); }
+.msg.thinking { background:var(--thinking); } .msg.tool_use { background:var(--tool); }
+.msg.tool_result { background:var(--result); } .msg.system, .msg.summary { background:var(--system); }
+.msg.error .head .kind { color:#c0392b; }
+details > summary { cursor:pointer; color:var(--muted); font-size:12px; padding:4px 0; }
+details .body { max-height: none; }
+.collapsed .body { max-height: 220px; overflow:hidden; position:relative; }
+.collapsed .body::after { content:""; position:absolute; inset:auto 0 0 0; height:60px; background:linear-gradient(transparent, var(--card)); }
+.expand { display:block; text-align:center; font-size:12px; padding:4px; cursor:pointer; color:var(--accent); border-top:1px solid var(--line); background:var(--card); }
+.hit { padding:10px 0; border-bottom:1px solid var(--line); }
+.hit .snip { margin:4px 0; }
+.pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; border:1px solid var(--line); background:var(--card); }
+.pager a, .pager span { margin-right:10px; }
+.toggle-bar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+.toggle-bar label { font-size:12px; display:flex; gap:4px; align-items:center; padding:3px 8px; border:1px solid var(--line); border-radius:12px; background:var(--card); cursor:pointer; }
+.hidden-kind { display:none !important; }
+.meter { display:inline-block; width:120px; height:8px; border:1px solid var(--line); border-radius:4px; vertical-align:middle; overflow:hidden; background:var(--card); }
+.meter span { display:block; height:100%; background:var(--accent); }
+.flash { background:var(--assistant); border:1px solid var(--line); padding:8px 12px; border-radius:6px; margin-bottom:12px; }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="/">{{ brand }}</a>
+  <form action="/search" method="get">
+    <input type="search" name="q" value="{{ q or '' }}" placeholder="search all sessions — words are ANDed, &quot;quote a phrase&quot;, trailing * for prefix" autofocus>
+    <button class="primary">Search</button>
+  </form>
+  {% if admin %}<a href="/local" class="small">local transcripts</a>{% endif %}
+  <a href="/token" class="small">hook / token</a>
+  {% for href, label in nav_links %}<a href="{{ href }}" class="small">{{ label }}</a>{% endfor %}
+  <span class="muted small">{{ user }}</span>
+</header>
+<main>
+{% block body %}{% endblock %}
+</main>
+<script>
+document.addEventListener('click', e => {
+  const x = e.target.closest('.expand'); if (!x) return;
+  const m = x.closest('.msg'); m.classList.toggle('collapsed'); x.textContent = m.classList.contains('collapsed') ? 'show all' : 'collapse';
+});
+</script>
+</body>
+</html>

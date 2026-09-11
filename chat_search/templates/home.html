@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block body %}
+{% if msg %}<div class="flash">{{ msg }}</div>{% endif %}
+<div class="card">
+  <form action="/upload" method="post" enctype="multipart/form-data" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <strong>Upload transcripts</strong>
+    <input type="file" name="files" accept=".jsonl,application/x-ndjson" multiple required>
+    <button class="primary">Index</button>
+    <span class="muted small">Claude Code sessions live in <span class="mono">~/.claude/projects/&lt;project&gt;/&lt;session-id&gt;.jsonl</span>. Several at once is fine; a file already indexed is skipped.</span>
+  </form>
+</div>
+
+<p class="muted small">{{ totals.n }} session(s), {{ totals.m }} indexed messages, {{ totals.b|bytes }}.
+{% if limit %} · Storage: <strong>{{ used|bytes }}</strong> of {{ limit|bytes }}
+<span class="meter"><span style="width:{{ [100, (100 * used / limit)|round|int]|min }}%"></span></span>
+{% if used > limit * 0.9 %}<a href="/account">upgrade</a>{% endif %}{% endif %}</p>
+<table>
+  <thead><tr><th>Session</th>{% if admin %}<th>Owner</th>{% endif %}<th>Project</th><th>From</th><th>To</th><th>Msgs</th><th>Size</th><th></th></tr></thead>
+  <tbody>
+  {% for s in sessions %}
+  <tr>
+    <td><a href="/session/{{ s.id }}">{{ s.title }}</a><br><span class="muted small mono">{{ s.session_id }}</span></td>
+    {% if admin %}<td class="small">{{ s.owner }}</td>{% endif %}
+    <td class="small">{{ s.project or '' }}{% if s.git_branch %}<br><span class="muted mono">{{ s.git_branch }}</span>{% endif %}</td>
+    <td class="small">{{ s.first_ts|ts }}</td>
+    <td class="small">{{ s.last_ts|ts }}</td>
+    <td class="small">{{ s.n_messages }}</td>
+    <td class="small">{{ s.n_bytes|bytes }}</td>
+    <td class="small" style="white-space:nowrap">
+      <a href="/search?session={{ s.id }}">search</a> ·
+      <a href="/session/{{ s.id }}/text">text</a> ·
+      <a href="/session/{{ s.id }}/raw">jsonl</a> ·
+      <form method="post" action="/session/{{ s.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this session from the index?')"><button style="padding:1px 6px;font-size:11px">delete</button></form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="8" class="muted">Nothing indexed yet — upload a .jsonl above, set up the <a href="/token">hook</a> so sessions upload themselves{% if admin %}, or pick from <a href="/local">local transcripts</a>{% endif %}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

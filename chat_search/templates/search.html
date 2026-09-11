@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ q }} — {{ brand }}{% endblock %}
+{% block body %}
+<form action="/search" method="get" class="card">
+  <input type="hidden" name="q" value="{{ q }}">
+  {% include "_filters.html" %}
+  <p class="muted small" style="margin:8px 0 0">Kinds unticked = all kinds. Tool filter matches the tool name on calls (Bash, Edit, Read …).</p>
+</form>
+
+{% if q %}
+<p class="muted">{{ total }} hit(s) for <strong>{{ q }}</strong>{% if pages > 1 %} — page {{ page }} of {{ pages }}{% endif %}</p>
+{% for h in hits %}
+<div class="hit">
+  <div class="small">
+    <span class="pill">{{ h.kind }}{% if h.kind == 'tool_use' and h.tool %} · {{ h.tool }}{% endif %}{% if h.is_error %} · error{% endif %}</span>
+    <span class="muted">{{ h.ts|ts }}</span> ·
+    <a href="/session/{{ h.session_pk }}?q={{ q|urlencode }}&around={{ h.seq }}#m{{ h.seq }}">{{ h.title }}</a>
+    <span class="muted">{{ h.project or '' }}</span>
+  </div>
+  <div class="snip mono">{{ h.snip }}</div>
+</div>
+{% endfor %}
+{% if pages > 1 %}
+<p class="pager">
+  {% for p in range(1, pages + 1) %}
+    {% if p == page %}<span><strong>{{ p }}</strong></span>{% else %}<a href="?q={{ q|urlencode }}&page={{ p }}{% for k in kinds %}&kind={{ k }}{% endfor %}{% if session %}&session={{ session }}{% endif %}&date_from={{ date_from }}&date_to={{ date_to }}&tool={{ tool|urlencode }}">{{ p }}</a>{% endif %}
+  {% endfor %}
+</p>
+{% endif %}
+{% else %}
+<p class="muted">Type something in the search box. Results link into the session at the matching message.</p>
+{% endif %}
+{% endblock %}
