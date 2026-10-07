@@ -28,7 +28,7 @@ dependencies = [
 chat-search = "chat_search.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/bitgeek-in/chat-search"
+Homepage = "https://github.com/sairam/chat-search"
 Hosted = "https://chat-search.bitgeek.in"
 
 [tool.hatch.build.targets.wheel]

@@ -23,7 +23,7 @@ Everything lives in one directory: a SQLite file and the raw transcripts.
 ## Run it locally
 
 ```bash
-pipx install chat-search        # or: pip install chat-search
+pipx install git+https://github.com/sairam/chat-search   # PyPI release coming
 chat-search serve --open        # http://127.0.0.1:9180
 ```
 
@@ -39,8 +39,9 @@ Data goes to `~/.local/share/chat-search` (`--data DIR` or `CHAT_SEARCH_DATA`).
 Docker:
 
 ```bash
+docker build -t chat-search https://github.com/sairam/chat-search.git
 docker run -d -p 127.0.0.1:9180:9180 -v chat-search:/data -v ~/.claude/projects:/projects:ro \
-  -e CLAUDE_PROJECTS_DIR=/projects ghcr.io/bitgeek-in/chat-search
+  -e CLAUDE_PROJECTS_DIR=/projects chat-search
 ```
 
 ## Automatic upload from Claude Code (hook)
@@ -127,7 +128,8 @@ app = create_app(Settings(data_dir="/srv/cs"),
 ## Development
 
 ```bash
-uv venv && uv pip install -e . && chat-search serve --data /tmp/cs
+uv venv && uv pip install -e . pytest && chat-search serve --data /tmp/cs
+.venv/bin/python -m pytest
 ```
 
 MIT © Sairam Kunala

@@ -1,7 +1,7 @@
 """Regression: upgrading an index whose sessions.sha256 was globally UNIQUE
 must keep every message. (RENAME TABLE rewrites messages' foreign key to the
 renamed table, so dropping it with foreign_keys=ON cascaded and emptied the
-index — 2026-09-11, claude-search.dot.com.in.)"""
+index.)"""
 import json
 import sqlite3
 from pathlib import Path
