@@ -1,4 +1,7 @@
 FROM python:3.12-slim
+LABEL org.opencontainers.image.source="https://github.com/sairam/chat-search" \
+      org.opencontainers.image.description="Render and full-text search your Claude Code session transcripts" \
+      org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY chat_search ./chat_search

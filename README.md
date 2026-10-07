@@ -39,9 +39,8 @@ Data goes to `~/.local/share/chat-search` (`--data DIR` or `CHAT_SEARCH_DATA`).
 Docker:
 
 ```bash
-docker build -t chat-search https://github.com/sairam/chat-search.git
 docker run -d -p 127.0.0.1:9180:9180 -v chat-search:/data -v ~/.claude/projects:/projects:ro \
-  -e CLAUDE_PROJECTS_DIR=/projects chat-search
+  -e CLAUDE_PROJECTS_DIR=/projects ghcr.io/sairam/chat-search
 ```
 
 ## Automatic upload from Claude Code (hook)
