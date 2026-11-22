@@ -20,7 +20,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import ChoiceLoader, FileSystemLoader
 from markupsafe import Markup, escape
 
-from .render import chat_items, first_line, fmt_ts, fts_query, highlight, human_bytes, next_day, render_text, toc_entries, tool_summary
+from .render import COMPACT_NOTE, chat_items, first_line, fmt_ts, fts_query, highlight, human_bytes, human_note, next_day, render_text, toc_entries, tool_summary
 from .store import KINDS, QuotaExceeded, Store, now_iso
 
 HERE = Path(__file__).parent
@@ -28,6 +28,7 @@ PAGE = 200            # messages per session page — a full session can be 10k+
 MAX_RENDER = 60_000   # chars of one message rendered inline; the rest is behind /session/{pk}/m/{seq}
 CHUNK = 100           # chat view: messages per on-demand load (earlier / later)
 AROUND = (40, 80)     # chat view: messages before / from a search hit on first load
+SEARCH_CAP = 2000     # newest hits read for one search; repeats among them are grouped
 HOOK_NAME = "chat-search-push"
 
 
@@ -223,7 +224,7 @@ def create_app(settings: Settings | None = None, *,
         session = int(session_raw) if session_raw.strip().isdigit() else None
         kinds = [k for k in (kind or []) if k in KINDS]
         match = fts_query(q)
-        hits, total = [], 0
+        hits, groups, total = [], [], 0
         with store.db() as conn:
             sessions = _sessions(conn, user)
             if match:
@@ -246,14 +247,30 @@ def create_app(settings: Settings | None = None, *,
                 limit = max(10, min(limit, 500))
                 rows = conn.execute(
                     "SELECT m.id, m.session_pk, m.seq, m.ts, m.kind, m.tool, m.is_error, s.title, s.project,"
+                    " substr(m.text, 1, 60) AS head,"
                     " snippet(messages_fts, 0, '\x01', '\x02', ' … ', 40) AS snip " + sql_from +
-                    " ORDER BY m.ts DESC LIMIT ? OFFSET ?", args + [limit, (page_no - 1) * limit]).fetchall()
+                    " ORDER BY m.ts DESC LIMIT ?", args + [SEARCH_CAP]).fetchall()
+                # The same text comes back many times: a file read again, and above all the
+                # summary Claude Code writes at every compaction, which repeats the session's
+                # standing instructions. One result per (session, matched text); all of a
+                # session's compaction summaries are one result. The newest hit leads.
+                by_key = {}
                 for r in rows:
-                    snip = str(escape(r["snip"])).replace("\x01", "<mark>").replace("\x02", "</mark>")
-                    hits.append({**dict(r), "snip": Markup(snip)})
+                    summary = r["kind"] == "human" and human_note(r["head"]) == COMPACT_NOTE
+                    key = (r["session_pk"], None if summary else
+                           " ".join(r["snip"].replace("\x01", "").replace("\x02", "").split()))
+                    g = by_key.get(key)
+                    if g is None:
+                        snip = str(escape(r["snip"])).replace("\x01", "<mark>").replace("\x02", "</mark>")
+                        by_key[key] = g = {**dict(r), "snip": Markup(snip), "summary": summary, "more": []}
+                        groups.append(g)
+                    else:
+                        g["more"].append({"seq": r["seq"], "ts": r["ts"], "kind": r["kind"], "tool": r["tool"]})
+                hits = groups[(page_no - 1) * limit: page_no * limit]
         return page(request, "search.html", user, q=q, kinds=kinds, session=session, date_from=date_from,
                     date_to=date_to, tool=tool, hits=hits, total=total, limit=limit, page=page_no,
-                    sessions=sessions, pages=(total + limit - 1) // limit if total else 0)
+                    n_results=len(groups), capped=total > SEARCH_CAP, cap=SEARCH_CAP,
+                    sessions=sessions, pages=(len(groups) + limit - 1) // limit if groups else 0)
 
     def _msg_filter(pk: int, kinds: list, date_from: str, date_to: str):
         where, args = ["session_pk = ?"], [pk]

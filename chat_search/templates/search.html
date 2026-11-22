@@ -8,16 +8,24 @@
 </form>
 
 {% if q %}
-<p class="muted">{{ total }} hit(s) for <strong>{{ q }}</strong>{% if pages > 1 %} — page {{ page }} of {{ pages }}{% endif %}</p>
+<p class="muted">{{ n_results }} result(s) for <strong>{{ q }}</strong>{% if n_results != total %} from {{ total }} hits; repeats of the same text in a session are grouped{% endif %}{% if capped %} (only the newest {{ cap }} hits were read){% endif %}{% if pages > 1 %} — page {{ page }} of {{ pages }}{% endif %}</p>
 {% for h in hits %}
 <div class="hit">
   <div class="small">
-    <span class="pill">{{ h.kind }}{% if h.kind == 'tool_use' and h.tool %} · {{ h.tool }}{% endif %}{% if h.is_error %} · error{% endif %}</span>
+    <span class="pill">{% if h.summary %}compaction summary{% else %}{{ h.kind }}{% if h.kind == 'tool_use' and h.tool %} · {{ h.tool }}{% endif %}{% endif %}{% if h.is_error %} · error{% endif %}</span>
     <span class="muted">{{ h.ts|ts }}</span> ·
     <a href="/session/{{ h.session_pk }}?q={{ q|urlencode }}&around={{ h.seq }}#m{{ h.seq }}">{{ h.title }}</a>
     <span class="muted">{{ h.project or '' }}</span>
   </div>
   <div class="snip mono">{{ h.snip }}</div>
+  {% if h.more %}
+  <details class="small">
+    <summary>{% if h.summary %}+{{ h.more|length }} earlier compaction {{ 'summary' if h.more|length == 1 else 'summaries' }} of this session also match{% else %}+{{ h.more|length }} more with the same text in this session{% endif %}</summary>
+    <p style="margin:4px 0 0; display:flex; flex-wrap:wrap; gap:2px 14px">
+      {% for x in h.more %}<a href="/session/{{ h.session_pk }}?q={{ q|urlencode }}&around={{ x.seq }}#m{{ x.seq }}">{{ x.ts|ts }}{% if not h.summary %} · {{ x.kind }}{% if x.kind == 'tool_use' and x.tool %} {{ x.tool }}{% endif %}{% endif %}</a>{% endfor %}
+    </p>
+  </details>
+  {% endif %}
 </div>
 {% endfor %}
 {% if pages > 1 %}

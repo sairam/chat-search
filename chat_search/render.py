@@ -71,6 +71,7 @@ def next_day(d: str) -> str:
 # The transcript stores harness traffic as "human" records too: task
 # notifications, reminders, slash-command echoes. In the chat view only what a
 # person typed gets a bubble; the rest becomes a quiet one-line note.
+COMPACT_NOTE = "Summary of the earlier conversation"   # written by Claude Code at each compaction
 _NOTES = (
     ("<task-notification>", "Background task update"),
     ("<system-reminder>", "System reminder"),
@@ -84,7 +85,7 @@ _NOTES = (
     ("<bash-stdout>", "Shell output"),
     ("Another Claude session sent a message:", "Message from another session"),
     ("The coordinator sent a message", "Message from the coordinator"),
-    ("This session is being continued from a previous", "Summary of the earlier conversation"),
+    ("This session is being continued from a previous", COMPACT_NOTE),
     ("Base directory for this skill:", "Skill instructions"),
     ("Caveat: The messages below", "Local command"),
     ("[Request interrupted by user", "Interrupted by the user"),
