@@ -48,6 +48,22 @@ CREATE INDEX IF NOT EXISTS messages_ts ON messages(ts);
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
     text, content='messages', content_rowid='id', tokenize='unicode61'
 );
+-- A reader's bookmarks (one message) and highlights (a run of text in one
+-- message: character offsets into its rendered text, plus the text itself).
+-- No foreign key: a re-pushed session is deleted and re-inserted under the
+-- same id, and its marks must outlive that.
+CREATE TABLE IF NOT EXISTS marks (
+    id          INTEGER PRIMARY KEY,
+    owner       TEXT NOT NULL,
+    session_pk  INTEGER NOT NULL,
+    seq         INTEGER NOT NULL,
+    kind        TEXT NOT NULL,
+    pos_start   INTEGER,
+    pos_end     INTEGER,
+    quote       TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS marks_session ON marks(session_pk, owner, seq);
 CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
     INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text);
 END;
@@ -280,9 +296,11 @@ class Store:
                         "SELECT 1 FROM sessions WHERE sha256 = ?", (old["sha256"],)).fetchone():
                     (self.uploads / f"{old['sha256']}.jsonl").unlink(missing_ok=True)
             cur = conn.execute(
-                "INSERT INTO sessions (session_id, sha256, filename, title, project, git_branch, version,"
-                " first_ts, last_ts, n_messages, n_bytes, uploaded_at, owner) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (session_id, sha, filename, meta["title"], meta["project"],
+                # A newer copy keeps the id of the one it replaces, so links to
+                # /session/<id> (and #m<seq> in it) survive every re-push.
+                "INSERT INTO sessions (id, session_id, sha256, filename, title, project, git_branch, version,"
+                " first_ts, last_ts, n_messages, n_bytes, uploaded_at, owner) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (old["id"] if old else None, session_id, sha, filename, meta["title"], meta["project"],
                  meta["git_branch"], meta["version"], first_ts, last_ts, len(rows), len(data), now_iso(), owner))
             pk = cur.lastrowid
             conn.executemany(
@@ -292,6 +310,7 @@ class Store:
 
     def delete_session(self, conn, s) -> None:
         conn.execute("DELETE FROM messages WHERE session_pk = ?", (s["id"],))
+        conn.execute("DELETE FROM marks WHERE session_pk = ?", (s["id"],))
         conn.execute("DELETE FROM sessions WHERE id = ?", (s["id"],))
         if not conn.execute("SELECT 1 FROM sessions WHERE sha256 = ?", (s["sha256"],)).fetchone():
             (self.uploads / f"{s['sha256']}.jsonl").unlink(missing_ok=True)

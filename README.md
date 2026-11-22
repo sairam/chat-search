@@ -78,6 +78,24 @@ session per 10 minutes (`CHAT_SEARCH_THROTTLE`); `SessionEnd` always pushes.
 Re-pushing a session replaces the copy on the server. Log:
 `~/.cache/chat-search/push.log`. Manual push: `chat-search-push FILE...`.
 
+## Session view: classic or chat
+
+`CHAT_SEARCH_UI=chat` shows a session as a conversation: prompts as bubbles,
+replies as prose, thinking and tool calls folded into one-line steps that open
+to show input and output. The default (`classic`) shows every message as a
+labelled box in transcript order. Search hits open the right step in both.
+
+The chat view also has:
+
+* loading on demand: a search hit opens a window around the message, and
+  earlier or later messages load as you scroll;
+* a contents panel for the whole session: your prompts by day, repeated prompts
+  folded, search-match counts, a marker on turns where a step failed. It follows
+  your place in the page and can be minimised;
+* bookmarks (the icon beside a message) and highlights (select text in a
+  message). They are per user, listed in the panel and on `/marks`, and the
+  contents can be filtered to bookmarked or highlighted turns.
+
 ## Team install (shared server)
 
 Put the app behind a reverse proxy that authenticates users and start it with

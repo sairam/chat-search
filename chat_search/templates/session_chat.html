@@ -1,0 +1,533 @@
+{% extends "base.html" %}
+{% block title %}{{ s.title }} — {{ brand }}{% endblock %}
+{% block head %}
+<style>
+main { max-width: 860px; }
+.s-head h1 { font-size:20px; line-height:1.3; margin:4px 0 6px; letter-spacing:-.01em; }
+.s-meta { display:flex; flex-wrap:wrap; gap:2px 14px; color:var(--muted); font-size:12.5px; margin:0 0 12px; }
+.s-meta a { color:var(--muted); }
+.s-tools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:0 0 6px; font-size:13px; }
+.s-tools > button, .s-tools > details > summary { padding:5px 12px; border:1px solid var(--line); border-radius:999px; background:var(--card);
+  color:var(--fg); font-size:13px; cursor:pointer; list-style:none; }
+.s-tools > details > summary::-webkit-details-marker { display:none; }
+.s-tools > details[open] { flex-basis:100%; }
+.s-tools > details[open] > summary { display:inline-block; margin-bottom:8px; border-color:var(--accent); color:var(--accent); }
+.s-tools .card { margin:0; }
+.pager { display:flex; flex-wrap:wrap; gap:4px 14px; align-items:center; margin:10px 0; font-size:13px; }
+.pager a, .pager span { margin:0; }
+.pager input { width:6.5em; padding:3px 6px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); }
+
+.chat { display:flex; flex-direction:column; gap:18px; margin:18px 0; overflow-anchor:none; }
+.more-edge { display:block; text-align:center; padding:9px 12px; margin:14px 0; border:1px dashed var(--line); border-radius:10px; font-size:13px; text-decoration:none; }
+.more-edge:hover { background:var(--soft); }
+.more-edge[hidden], .edge-end[hidden] { display:none; }
+.edge-end { text-align:center; margin:18px 0; }
+.chat > * { min-width:0; }
+.chat [id] { scroll-margin-top:72px; }
+.anchor { display:block; height:0; margin:-9px 0; scroll-margin-top:72px; }
+.when { font-size:11.5px; color:var(--muted); text-decoration:none; font-variant-numeric:tabular-nums; }
+.when:hover { color:var(--accent); }
+.day { align-self:center; font-size:12px; color:var(--muted); display:flex; align-items:center; gap:12px; width:100%; }
+.day::before, .day::after { content:""; flex:1; border-top:1px solid var(--line); }
+
+/* a prompt: bubble on the right */
+.turn-human { align-self:flex-end; max-width:min(88%, 640px); display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
+.bubble { background:var(--human); border-radius:18px 18px 4px 18px; padding:10px 16px; font-size:15px; line-height:1.55; overflow:hidden; max-width:100%; }
+.collapsed .bubble { max-height:260px; position:relative; }
+.collapsed .bubble::after { content:""; position:absolute; inset:auto 0 0 0; height:70px; background:linear-gradient(transparent, var(--human)); }
+.turn-human .more { padding:0 4px; }
+
+/* a reply: plain prose, full width */
+.turn-assistant { display:flex; flex-direction:column; gap:3px; }
+.md { font-size:15.5px; line-height:1.65; overflow-wrap:anywhere; }
+.md > :first-child { margin-top:0; } .md > :last-child { margin-bottom:0; }
+.md p, .md ul, .md ol, .md pre, .md table, .md blockquote { margin:0 0 .8em; }
+.md h1, .md h2, .md h3, .md h4 { line-height:1.3; margin:1.3em 0 .5em; letter-spacing:-.01em; }
+.md h1 { font-size:1.3em; } .md h2 { font-size:1.17em; } .md h3 { font-size:1.05em; } .md h4 { font-size:1em; }
+.md ul, .md ol { padding-left:1.5em; } .md li { margin:.2em 0; } .md li > p { margin:0 0 .3em; }
+.md code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.86em; background:var(--soft); border-radius:5px; padding:.12em .36em; }
+.md pre { background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:12px 14px; white-space:pre; overflow-x:auto; font-size:13px; line-height:1.5; }
+.md pre code { background:none; padding:0; font-size:inherit; }
+.md blockquote { border-left:3px solid var(--line); padding-left:14px; color:var(--muted); }
+.md table { display:block; width:max-content; max-width:100%; overflow-x:auto; font-size:14px; }
+.md th { text-transform:none; letter-spacing:0; font-size:13px; color:var(--fg); background:var(--soft); }
+.md th, .md td { border:1px solid var(--line); padding:6px 10px; }
+.md hr { border:0; border-top:1px solid var(--line); margin:1.2em 0; }
+.md a { text-underline-offset:2px; }
+.bubble.md { font-size:15px; line-height:1.55; }
+
+/* thinking and tool calls: one-line rows that open */
+.steps { border:1px solid var(--line); border-radius:12px; background:var(--card); overflow:hidden; }
+.step { border-top:1px solid var(--line); }
+.step:first-child { border-top:0; }
+.step > summary { display:flex; align-items:center; gap:10px; padding:7px 12px; cursor:pointer; font-size:13px; color:var(--fg); list-style:none; min-width:0; }
+.step > summary::-webkit-details-marker { display:none; }
+.step > summary::before { content:""; flex:none; width:6px; height:6px; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted);
+  transform:rotate(-45deg); transition:transform .12s; }
+.step[open] > summary::before { transform:rotate(45deg); }
+.step > summary:hover { background:var(--soft); }
+.step .tool { flex:none; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; font-weight:600; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.step .what { flex:1; min-width:0; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.step.thinking .tool { font-family:inherit; font-weight:500; font-style:italic; color:var(--muted); }
+.step.thinking .what { font-style:italic; }
+.tag { flex:none; font-size:11px; padding:0 7px; border-radius:999px; border:1px solid var(--line); color:var(--muted); line-height:18px; }
+.tag.bad { color:var(--bad); border-color:var(--bad); }
+.tag.hit { background:var(--mark); border-color:transparent; color:var(--fg); }
+.step .io { padding:2px 12px 12px 28px; display:flex; flex-direction:column; gap:8px; }
+.step .io h6 { margin:6px 0 0; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); display:flex; gap:10px; align-items:baseline; }
+.step .io h6 a { font-weight:400; text-transform:none; letter-spacing:0; }
+.step .io pre { background:var(--soft); border-radius:8px; padding:9px 11px; max-height:440px; overflow:auto; font-size:12.5px; line-height:1.5; }
+.step.error .io .out pre { box-shadow:inset 3px 0 0 var(--bad); }
+
+/* harness traffic: quiet notes */
+.note { align-self:center; max-width:100%; font-size:12.5px; color:var(--muted); text-align:center; }
+details.note { width:100%; text-align:left; }
+details.note > summary { cursor:pointer; padding:0; list-style:none; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px; }
+details.note > summary::-webkit-details-marker { display:none; }
+details.note > summary b { font-weight:600; }
+details.note > summary:hover { color:var(--fg); }
+details.note[open] > summary { margin-bottom:8px; white-space:normal; }
+details.note .io { border:1px solid var(--line); border-radius:10px; background:var(--card); padding:10px 12px; color:var(--fg); max-height:480px; overflow:auto; }
+details.note .io pre { font-size:12.5px; }
+
+.target > .bubble, .turn-assistant.target, .step.target, .note.target { animation:flash 2.4s ease-out 1; }
+.turn-assistant.target { border-radius:8px; }
+.turn-assistant.target { animation-name:flash-out; }
+@keyframes flash { 0%, 35% { box-shadow:0 0 0 3px var(--mark); } 100% { box-shadow:0 0 0 3px transparent; } }
+@keyframes flash-out { 0%, 35% { box-shadow:0 0 0 8px var(--bg), 0 0 0 11px var(--mark); } 100% { box-shadow:0 0 0 8px var(--bg), 0 0 0 11px transparent; } }
+body.no-steps .steps, body.no-steps .note { display:none; }
+@media (max-width:640px) {
+  main { padding:14px 16px 50px; }
+  header { flex-wrap:wrap; gap:8px 14px; padding:10px 16px; }
+  header form { order:9; flex-basis:100%; }
+  .turn-human { max-width:94%; }
+  .chat [id] { scroll-margin-top:118px; }
+  .step .io { padding-left:12px; }
+}
+@media (prefers-reduced-motion: reduce) { .target, .target > .bubble { animation:none !important; } .step > summary::before { transition:none; } }
+
+/* contents + marks panel */
+.layout { display:block; }
+.side { background:var(--card); border:1px solid var(--line); display:flex; flex-direction:column; min-height:0; font-size:13px; }
+.side-bar { display:flex; align-items:center; gap:2px; padding:6px 6px 0; border-bottom:1px solid var(--line); }
+.side-bar [role=tab] { border:0; background:none; padding:7px 10px 8px; border-radius:0; font-size:13px; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; }
+.side-bar [role=tab][aria-selected=true] { color:var(--fg); font-weight:600; border-bottom-color:var(--accent); }
+.side-bar .sp { flex:1; }
+.side-bar .ic { border:0; background:none; padding:6px 8px; color:var(--muted); font-size:13px; border-radius:6px; }
+.side-bar .ic:hover { background:var(--soft); color:var(--fg); }
+.side-pane { display:flex; flex-direction:column; min-height:0; flex:1; }
+.side-pane[hidden] { display:none; }
+.side-find { margin:8px 8px 0; padding:5px 9px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font-size:13px; }
+.chips { display:flex; flex-wrap:wrap; gap:5px; padding:8px 8px 6px; }
+.chips button { padding:2px 9px; border-radius:999px; font-size:12px; color:var(--muted); background:none; }
+.chips button[aria-pressed=true] { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+.side-list { overflow-y:auto; flex:1; min-height:0; position:relative; padding:0 0 8px; overscroll-behavior:contain; }
+.side-empty { padding:10px 12px; color:var(--muted); margin:0; }
+.toc-day > summary { position:sticky; top:0; z-index:1; background:var(--card); padding:6px 12px 4px; font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); cursor:pointer; }
+.toc-row { display:flex; align-items:center; gap:6px; padding:4px 10px 4px 9px; border-left:3px solid transparent; color:var(--fg); text-decoration:none; }
+.toc-row:hover { background:var(--soft); }
+.toc-row .t { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.toc-row.rep .t, .toc-row .x { color:var(--muted); }
+.toc-row.on { border-left-color:var(--accent); background:var(--soft); font-weight:600; }
+.toc-row .n { flex:none; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; font-weight:400; }
+.toc-row .dot { flex:none; width:6px; height:6px; border-radius:50%; background:var(--bad); }
+.toc-row .sw { flex:none; width:9px; height:9px; border-radius:2px; background:var(--hl); border:1px solid var(--accent); }
+.toc-row .bk { flex:none; color:var(--accent); display:flex; }
+.toc-row .tag { line-height:16px; font-weight:400; }
+.toc-mile { padding:3px 12px; font-size:11px; color:var(--muted); display:flex; align-items:center; gap:8px; }
+.toc-mile::before, .toc-mile::after { content:""; flex:1; border-top:1px dashed var(--line); }
+.mark-row { display:flex; align-items:flex-start; gap:4px; padding:2px 6px 2px 0; border-left:3px solid transparent; }
+.mark-row.hl { border-left-color:var(--hl); }
+.mark-row.bookmark { border-left-color:var(--accent); }
+.mark-row + .mark-row { margin-top:4px; }
+.mark-row .go { flex:1; min-width:0; text-align:left; border:0; background:none; padding:5px 8px; border-radius:6px; font-size:13px; line-height:1.4; color:var(--fg); }
+.mark-row .go:hover { background:var(--soft); }
+.mark-row .q { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+.mark-row .meta { display:block; font-size:11px; color:var(--muted); margin-top:1px; }
+.mark-row .del { border:0; background:none; color:var(--muted); padding:4px 7px; border-radius:6px; font-size:14px; line-height:1; }
+.mark-row .del:hover { background:var(--soft); color:var(--bad); }
+.side-hint { margin:0; padding:8px 12px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+#side-open { position:fixed; right:16px; bottom:16px; z-index:8; border-radius:999px; padding:9px 16px; box-shadow:0 2px 10px rgba(0,0,0,.18); }
+#side-shade { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:19; }
+@media (min-width:1220px) {
+  main { max-width:1230px; }
+  .layout { display:grid; grid-template-columns:minmax(0, 860px) 310px; gap:0 34px; justify-content:center; align-items:start; }
+  .side { position:sticky; top:70px; height:min(calc(100vh - 96px), 720px); border-radius:12px; }
+  .side.min { height:auto; }
+  .side.min .side-pane { display:none; }
+  .side.min .side-bar { border-bottom:0; padding-bottom:6px; }
+  .side.min .side-bar [role=tab] { border-bottom-color:transparent; }
+  #side-open, #side-shade, #side-close { display:none !important; }
+}
+@media (max-width:1219.98px) {
+  .side { position:fixed; z-index:20; top:0; right:0; bottom:0; width:min(350px, 90vw); border-width:0 0 0 1px; transform:translateX(102%); transition:transform .18s ease-out; visibility:hidden; }
+  .side.open { transform:none; visibility:visible; }
+  #side-min { display:none; }
+}
+
+/* bookmarks + highlights */
+.foot { display:inline-flex; align-items:center; gap:6px; }
+.bm { border:0; background:none; padding:2px; color:var(--muted); display:inline-flex; border-radius:4px; opacity:0; flex:none; }
+.bm:hover { color:var(--accent); }
+.bm[aria-pressed=true] { opacity:1; color:var(--accent); }
+.bm[aria-pressed=true] path { fill:currentColor; }
+.turn-human:hover .bm, .turn-assistant:hover .bm, .step > summary:hover .bm, .bm:focus-visible { opacity:1; }
+@media (hover:none) { .bm { opacity:.55; } }
+mark.hl { background:var(--hl); color:inherit; border-radius:2px; padding:0; }
+mark.hl.flash { animation:hlflash 2.2s ease-out 1; }
+@keyframes hlflash { 0%, 40% { box-shadow:0 0 0 3px var(--accent); } 100% { box-shadow:0 0 0 3px transparent; } }
+#hl-btn { position:fixed; z-index:15; background:var(--fg); color:var(--bg); border-color:var(--fg); border-radius:999px; padding:6px 14px; font-size:13px; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+.body > :first-child { margin-top:0; } .body > :last-child { margin-bottom:0; }
+@media (prefers-reduced-motion: reduce) { .side { transition:none; } mark.hl.flash { animation:none; } }
+</style>
+{% endblock %}
+{% block body %}
+<div class="layout"><div class="col">
+{% set base = "?q=" ~ (q|urlencode) ~ "&date_from=" ~ date_from ~ "&date_to=" ~ date_to %}
+{% for k in kinds %}{% set base = base ~ "&kind=" ~ k %}{% endfor %}
+<div class="s-head">
+  <h1>{{ s.title }}</h1>
+  <p class="s-meta">
+    {% if s.project %}<span>{{ s.project }}{% if s.git_branch %} ({{ s.git_branch }}){% endif %}</span>{% endif %}
+    <span>{{ s.first_ts|ts }} → {{ s.last_ts|ts }}</span>
+    <span>{{ s.n_messages }} messages</span>
+    <span>Claude Code {{ s.version or '?' }}</span>
+    <span><a href="/search?session={{ s.id }}">search this session</a> · <a href="/session/{{ s.id }}/text">plain text</a> · <a href="/session/{{ s.id }}/raw">raw jsonl</a></span>
+  </p>
+  <div class="s-tools">
+    <button type="button" id="steps-open">Open all steps</button>
+    <button type="button" id="steps-hide" aria-pressed="false">Hide steps</button>
+    <details{% if kinds or date_from or date_to %} open{% endif %}>
+      <summary>Filter and highlight{% if q %}: {{ q }}{% endif %}</summary>
+      <form method="get" class="card">
+        <div class="filters" style="margin-bottom:8px">
+          <label>Highlight <input type="search" name="q" value="{{ q }}" placeholder="terms to highlight"></label>
+        </div>
+        {% include "_filters.html" %}
+      </form>
+    </details>
+  </div>
+  <nav class="pager">
+    <a href="{{ base }}&page=1">« start</a>
+    <span class="muted">showing <span id="range">#{{ first_seq }}–#{{ last_seq }}</span> of {{ total }}</span>
+    <a href="{{ base }}&page={{ pages }}">end »</a>
+    <label class="muted">go to # <input type="number" min="0" aria-label="Go to message number" onchange="location.href='{{ base }}&around='+this.value+'#m'+this.value"></label>
+  </nav>
+</div>
+
+{% if items %}
+<a class="more-edge" id="more-before" href="{{ base }}&around={{ [first_seq - 1, 0]|max }}"{% if not has_before %} hidden{% endif %}>Load earlier messages</a>
+<div class="chat" id="chat" data-pk="{{ s.id }}" data-qs="{{ base[1:] }}" data-first="{{ first_seq }}" data-last="{{ last_seq }}">
+{% include "_chat_items.html" %}
+</div>
+<a class="more-edge" id="more-after" href="{{ base }}&around={{ last_seq + 1 }}"{% if not has_after %} hidden{% endif %}>Load later messages</a>
+<p class="muted small edge-end" id="at-end"{% if has_after %} hidden{% endif %}>End of the session.</p>
+{% else %}
+<p class="muted">No messages match the filters.</p>
+{% endif %}
+</div>
+{% if items %}
+<aside class="side" id="side" aria-label="Contents and marks">
+  <div class="side-bar" role="tablist">
+    <button type="button" role="tab" id="tab-toc" aria-selected="true" aria-controls="pane-toc">Contents</button>
+    <button type="button" role="tab" id="tab-marks" aria-selected="false" aria-controls="pane-marks">Marks <span id="marks-n"></span></button>
+    <span class="sp"></span>
+    <button type="button" class="ic" id="side-min" aria-expanded="true" title="Minimise">Minimise</button>
+    <button type="button" class="ic" id="side-close">Close</button>
+  </div>
+  <div class="side-pane" id="pane-toc" role="tabpanel" aria-labelledby="tab-toc">
+    <input type="search" class="side-find" id="toc-find" placeholder="Filter your prompts" aria-label="Filter your prompts">
+    <div class="chips" id="toc-chips">
+      <button type="button" data-f="all" aria-pressed="true">All</button>
+      <button type="button" data-f="bookmark" aria-pressed="false">Bookmarked</button>
+      <button type="button" data-f="highlight" aria-pressed="false">Highlighted</button>
+      {% if q %}<button type="button" data-f="hits" aria-pressed="false">Matches</button>{% endif %}
+    </div>
+    <div class="side-list" id="toc"><p class="side-empty">Loading…</p></div>
+  </div>
+  <div class="side-pane" id="pane-marks" role="tabpanel" aria-labelledby="tab-marks" hidden>
+    <div class="chips" id="mark-chips">
+      <button type="button" data-f="all" aria-pressed="true">All</button>
+      <button type="button" data-f="bookmark" aria-pressed="false">Bookmarks</button>
+      <button type="button" data-f="highlight" aria-pressed="false">Highlights</button>
+    </div>
+    <div class="side-list" id="marks"></div>
+    <p class="side-hint">Select text in a message to highlight it. Use the bookmark icon beside a message to bookmark it.</p>
+  </div>
+</aside>
+<button type="button" id="side-open">Contents</button>
+<div id="side-shade" hidden></div>
+<button type="button" id="hl-btn" hidden>Highlight</button>
+{% endif %}
+</div>
+<script>
+(() => {
+  const chat = document.getElementById('chat'); if (!chat) return;
+  const $ = id => document.getElementById(id);
+  const pk = chat.dataset.pk, qs = chat.dataset.qs, Q = new URLSearchParams(qs).get('q') || '';
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const hm = new Intl.DateTimeFormat([], {hour: '2-digit', minute: '2-digit'});
+  const dayFmt = new Intl.DateTimeFormat([], {weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'});
+  const shortFmt = new Intl.DateTimeFormat([], {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+  // Times are stored in UTC: show them in the reader's zone.
+  const localise = root => root.querySelectorAll('time[datetime]').forEach(t => { const d = new Date(t.dateTime); if (!isNaN(d)) t.textContent = hm.format(d); });
+  // After the first render and after every loaded chunk: join what a chunk edge split, and mark where a day starts.
+  const tidy = () => {
+    chat.querySelectorAll('details.step.result[data-result-of]').forEach(res => {       // an output whose call is now on the page
+      const call = chat.querySelector('details.step.tool[data-call="' + CSS.escape(res.dataset.resultOf) + '"]');
+      if (!call || call.querySelector('.out')) return;
+      const out = el('div', 'out'), h = el('h6'), id = res.id, group = res.parentElement;
+      h.innerHTML = 'Output <a class="when" href="#' + id + '">#' + id.slice(1) + '</a>';
+      out.append(h, ...res.querySelector('.io > div').childNodes);
+      if (res.classList.contains('error')) call.classList.add('error');
+      res.remove(); out.id = id; call.querySelector('.io').append(out);
+      if (!group.children.length) group.remove();
+    });
+    chat.querySelectorAll('.steps').forEach(g => {                                      // one run of steps = one block
+      if (!g.isConnected) return;
+      let n = g.nextElementSibling; while (n && n.classList.contains('anchor')) n = n.nextElementSibling;
+      while (n && n.classList.contains('steps')) { const dead = n; g.append(...n.children); n = n.nextElementSibling; dead.remove();
+        while (n && n.classList.contains('anchor')) n = n.nextElementSibling; }
+    });
+    chat.querySelectorAll(':scope > .day').forEach(d => d.remove());
+    let last = '';
+    [...chat.children].forEach(c => {
+      const d = new Date(c.dataset.ts || ''); if (isNaN(d)) return;
+      const label = dayFmt.format(d);
+      if (label !== last) { chat.insertBefore(el('div', 'day', label), c); last = label; }
+    });
+  };
+  localise(chat); tidy();
+
+  // ── jumping: a search hit, a contents entry or a mark lands on #m<seq> ──
+  const more = turn => { const b = turn.querySelector('.more'); b.textContent = turn.classList.toggle('collapsed') ? 'show all' : 'show less'; };
+  chat.addEventListener('click', e => { const b = e.target.closest('.more'); if (b) more(b.closest('.turn-human')); });
+  const reveal = (node, markId) => {                       // open whatever holds it, then show it
+    for (let p = node; p && p !== chat; p = p.parentElement) { if (p.tagName === 'DETAILS') p.open = true; if (p.classList.contains('collapsed')) more(p); }
+    const hl = markId && chat.querySelector('mark.hl[data-id="' + markId + '"]');
+    const box = hl || node.closest('.step, .note, .turn-human, .turn-assistant') || node, cls = hl ? 'flash' : 'target';
+    box.classList.remove(cls); void box.offsetWidth; box.classList.add(cls);
+    (hl || node).scrollIntoView({block: hl || node.classList.contains('anchor') ? 'center' : 'start'});
+  };
+  const go = () => { const node = location.hash.length > 1 && $(location.hash.slice(1)); if (node) reveal(node); };
+  const jump = (seq, markId) => {
+    const node = $('m' + seq);
+    if (!node) { location.href = '?' + qs + '&around=' + seq + '#m' + seq; return; }     // not loaded: open the session there
+    history.replaceState(null, '', '#m' + seq); reveal(node, markId); closeSide();
+  };
+  go(); addEventListener('hashchange', go);
+
+  // ── earlier and later messages load when the reader gets near either end ──
+  const edge = {before: $('more-before'), after: $('more-after')};
+  const label = {before: 'Load earlier messages', after: 'Load later messages'};
+  const range = $('range'), busy = {};
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) load(e.target === edge.before ? 'before' : 'after'); }), {rootMargin: '900px 0px'});
+  async function load(dir) {
+    const a = edge[dir]; if (busy[dir] || a.hidden) return;
+    busy[dir] = true; a.textContent = 'Loading…';
+    let j;
+    try {
+      const r = await fetch('/session/' + pk + '/chunk?' + dir + '=' + (dir === 'before' ? chat.dataset.first : chat.dataset.last) + '&' + qs);
+      if (!r.ok) throw new Error(r.status);
+      j = await r.json();
+    } catch (err) { a.textContent = 'Could not load. Press to try again'; busy[dir] = false; io.unobserve(a); return; }
+    const t = document.createElement('template'); t.innerHTML = j.html; localise(t.content);
+    if (dir === 'before') {
+      const keep = [...chat.children].find(c => !c.classList.contains('day')), y = keep && keep.getBoundingClientRect().top;
+      chat.prepend(t.content); tidy();
+      if (keep && keep.isConnected) scrollBy(0, keep.getBoundingClientRect().top - y);       // the reader's place stays put
+      if (j.first !== null) chat.dataset.first = j.first;
+    } else {
+      chat.append(t.content); tidy();
+      if (j.last !== null) chat.dataset.last = j.last;
+    }
+    range.textContent = '#' + chat.dataset.first + '–#' + chat.dataset.last;
+    a.textContent = label[dir]; busy[dir] = false;
+    if (!j.more) { a.hidden = true; io.unobserve(a); if (dir === 'after') $('at-end').hidden = false; }
+    else { io.unobserve(a); io.observe(a); }                                                // still in view? load again
+    if (document.body.classList.contains('all-open')) chat.querySelectorAll('details.step').forEach(d => { d.open = true; });
+    paintMarks(); spy();
+  }
+  for (const dir of ['before', 'after']) {
+    edge[dir].addEventListener('click', e => { e.preventDefault(); load(dir); });
+    if (!edge[dir].hidden) io.observe(edge[dir]);
+  }
+
+  const openBtn = $('steps-open'), hideBtn = $('steps-hide');
+  openBtn.addEventListener('click', () => {
+    const open = document.body.classList.toggle('all-open');
+    chat.querySelectorAll('details.step').forEach(d => { d.open = open; });
+    openBtn.textContent = open ? 'Close all steps' : 'Open all steps';
+  });
+  hideBtn.addEventListener('click', () => {
+    const off = document.body.classList.toggle('no-steps');
+    hideBtn.setAttribute('aria-pressed', off); hideBtn.textContent = off ? 'Show steps' : 'Hide steps';
+  });
+
+  // ── side panel: tabs, minimise (wide screens), drawer (narrow screens) ──
+  const side = $('side'), shade = $('side-shade'), minBtn = $('side-min');
+  const pref = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; };
+  const tab = name => { for (const n of ['toc', 'marks']) { $('tab-' + n).setAttribute('aria-selected', n === name); $('pane-' + n).hidden = n !== name; } };
+  const setMin = on => { side.classList.toggle('min', on); minBtn.textContent = on ? 'Expand' : 'Minimise'; minBtn.title = minBtn.textContent; minBtn.setAttribute('aria-expanded', !on); };
+  for (const n of ['toc', 'marks']) $('tab-' + n).addEventListener('click', () => { tab(n); if (side.classList.contains('min')) { setMin(false); pref('cs.side.min', '0'); } spy(); });
+  minBtn.addEventListener('click', () => { const on = !side.classList.contains('min'); setMin(on); pref('cs.side.min', on ? '1' : '0'); spy(); });
+  setMin(pref('cs.side.min') === '1');
+  const openSide = () => { side.classList.add('open'); shade.hidden = false; spy(); };
+  function closeSide() { side.classList.remove('open'); shade.hidden = true; }
+  $('side-open').addEventListener('click', openSide); $('side-close').addEventListener('click', closeSide); shade.addEventListener('click', closeSide);
+  addEventListener('keydown', e => { if (e.key === 'Escape') closeSide(); });
+
+  // ── contents: your prompts for the whole session, by day ──
+  const tocEl = $('toc'), find = $('toc-find');
+  let prompts = [], tocFilter = 'all', marks = [];
+  const promptFor = seq => { let lo = 0, hi = prompts.length - 1, at = -1;      // the prompt whose turn holds message #seq
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (prompts[mid].seq <= seq) { at = mid; lo = mid + 1; } else hi = mid - 1; }
+    return at < 0 ? null : prompts[at]; };
+  const BK = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4 2.5h8V14l-4-3-4 3z" fill="currentColor"/></svg>';
+  const renderToc = entries => {
+    tocEl.textContent = ''; prompts = [];
+    let box = null, lastDay = null;
+    for (const e of entries) {
+      const d = new Date(e.ts || ''), day = isNaN(d) ? (lastDay || 'No date') : dayFmt.format(d);
+      if (day !== lastDay) { box = el('details', 'toc-day'); box.open = true; box.append(el('summary', '', day)); tocEl.append(box); lastDay = day; }
+      if (e.mile) { box.append(el('div', 'toc-mile', e.mile)); continue; }
+      const a = el('a', 'toc-row' + (e.n > 1 ? ' rep' : '')), t = el('span', 't');
+      a.href = '?' + qs + '&around=' + e.seq + '#m' + e.seq; a.dataset.seq = e.seq; a.title = e.text;
+      if (e.n > 1) t.append(el('span', 'x', '×' + e.n + ' '));
+      t.append(e.text); a.append(t);
+      if (e.hits) a.append(el('span', 'tag hit', e.hits));
+      if (e.err) { const dot = el('span', 'dot'); dot.title = 'A step failed in this turn'; a.append(dot); }
+      if (e.steps) { const n = el('span', 'n', e.steps); n.title = e.steps + ' tool calls'; a.append(n); }
+      e.row = a; prompts.push(e); box.append(a);
+    }
+    if (!prompts.length) tocEl.append(el('p', 'side-empty', 'No prompts in this session.'));
+    paintMarks(); spy();
+  };
+  const filterToc = () => {
+    const needle = find.value.trim().toLowerCase(); let shown = 0;
+    for (const p of prompts) {
+      const ok = (!needle || p.text.toLowerCase().includes(needle)) &&
+        (tocFilter === 'all' || (tocFilter === 'hits' ? p.hits > 0 : p.marked && p.marked[tocFilter]));
+      p.row.hidden = !ok; shown += ok;
+    }
+    tocEl.querySelectorAll('.toc-day').forEach(d => { d.hidden = !d.querySelector('.toc-row:not([hidden])'); });
+    tocEl.querySelectorAll('.toc-mile').forEach(m => { m.hidden = tocFilter !== 'all' || !!needle; });
+    let none = tocEl.querySelector('.side-empty.none');
+    if (!shown && prompts.length) { if (!none) { none = el('p', 'side-empty none'); tocEl.append(none); }
+      none.textContent = tocFilter === 'bookmark' ? 'No bookmarked turns yet.' : tocFilter === 'highlight' ? 'No highlighted turns yet.' : 'Nothing matches.'; }
+    else if (none) none.remove();
+  };
+  const chips = (box, set) => box.addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (!b) return;
+    box.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); set(b.dataset.f); });
+  chips($('toc-chips'), f => { tocFilter = f; filterToc(); });
+  find.addEventListener('input', filterToc);
+  tocEl.addEventListener('click', e => { const a = e.target.closest('.toc-row'); if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); jump(+a.dataset.seq); });
+  // Which prompt is the reader in? The one whose turn is at the top of the window.
+  let onRow = null, ticking = false;
+  function spy() {
+    if (!prompts.length) return;
+    const kids = chat.children, y = (document.querySelector('header').offsetHeight || 54) + 24;
+    let lo = 0, hi = kids.length - 1, at = kids.length - 1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (kids[mid].getBoundingClientRect().bottom > y) { at = mid; hi = mid - 1; } else lo = mid + 1; }
+    let seq = null;
+    for (let i = at; i < kids.length && seq === null; i++) { const n = /^m\d+$/.test(kids[i].id) ? kids[i] : kids[i].querySelector('[id^="m"]'); if (n) seq = +n.id.slice(1); }
+    const p = seq === null ? null : promptFor(seq), row = p && p.row;
+    if (row === onRow) return;
+    if (onRow) { onRow.classList.remove('on'); onRow.removeAttribute('aria-current'); }
+    onRow = row; if (!row) return;
+    row.classList.add('on'); row.setAttribute('aria-current', 'true');
+    if (row.hidden || !row.offsetParent) return;                                        // keep it in view inside the list only
+    const top = row.offsetTop, h = tocEl.clientHeight;
+    if (top < tocEl.scrollTop + 30 || top + row.offsetHeight > tocEl.scrollTop + h - 8) tocEl.scrollTop = Math.max(0, top - h / 2);
+  }
+  addEventListener('scroll', () => { if (ticking) return; ticking = true; requestAnimationFrame(() => { ticking = false; spy(); if (!hlBtn.hidden) offer(); }); }, {passive: true});
+  addEventListener('resize', spy);
+
+  // ── bookmarks and highlights ──
+  const marksEl = $('marks'), hlBtn = $('hl-btn');
+  let markFilter = 'all', pending = null;
+  const api = (method, path, body) => fetch('/session/' + pk + '/marks' + path, {method, headers: body ? {'Content-Type': 'application/json'} : {}, body: body && JSON.stringify(body)})
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+  const texts = body => { const w = document.createTreeWalker(body, NodeFilter.SHOW_TEXT), out = []; let n; while ((n = w.nextNode())) out.push(n); return out; };
+  // A highlight is a run of characters in one message's text: wrap each text node it covers.
+  const wrap = (body, k) => {
+    const nodes = texts(body), all = nodes.map(n => n.data).join('');
+    let s = k.pos_start, e = k.pos_end;
+    if (all.slice(s, e) !== k.quote) { s = all.indexOf(k.quote); if (s < 0) return false; e = s + k.quote.length; }   // the text moved: find it again
+    let pos = 0; const todo = [];
+    for (const n of nodes) { const a = Math.max(s, pos), b = Math.min(e, pos + n.length); if (b > a && n.data.slice(a - pos, b - pos).trim()) todo.push([n, a - pos, b - pos]); pos += n.length; }
+    for (const [n, a, b] of todo) { const r = document.createRange(); r.setStart(n, a); r.setEnd(n, b); const m = el('mark', 'hl'); m.dataset.id = k.id; r.surroundContents(m); }
+    return true;
+  };
+  const unwrap = id => chat.querySelectorAll('mark.hl[data-id="' + id + '"]').forEach(m => { const p = m.parentNode; m.replaceWith(...m.childNodes); p.normalize(); });
+  function paintMarks() {                                    // page + panel + contents all follow `marks`
+    const booked = new Set(marks.filter(k => k.kind === 'bookmark').map(k => k.seq));
+    chat.querySelectorAll('.bm').forEach(b => { const on = booked.has(+b.dataset.seq); b.setAttribute('aria-pressed', on); b.title = on ? 'Remove bookmark' : 'Bookmark'; });
+    for (const k of marks) if (k.kind === 'highlight' && !chat.querySelector('mark.hl[data-id="' + k.id + '"]')) {
+      const body = chat.querySelector('.body[data-seq="' + k.seq + '"]'); if (body) wrap(body, k); }
+    $('marks-n').textContent = marks.length ? '(' + marks.length + ')' : '';
+    marksEl.textContent = '';
+    const list = marks.filter(k => markFilter === 'all' || k.kind === markFilter).sort((a, b) => a.seq - b.seq || (a.pos_start || 0) - (b.pos_start || 0));
+    for (const k of list) {
+      const row = el('div', 'mark-row ' + (k.kind === 'highlight' ? 'hl' : 'bookmark')), go = el('button', 'go'), del = el('button', 'del', '×');
+      go.type = del.type = 'button'; go.dataset.seq = k.seq; go.dataset.id = k.id; del.dataset.del = k.id;
+      const d = new Date(k.ts || '');
+      go.append(el('span', 'q', k.quote), el('span', 'meta', (k.kind === 'highlight' ? 'Highlight' : 'Bookmark') + ' · #' + k.seq + (isNaN(d) ? '' : ' · ' + shortFmt.format(d))));
+      del.setAttribute('aria-label', 'Remove this ' + k.kind); del.title = 'Remove';
+      row.append(go, del); marksEl.append(row);
+    }
+    if (!list.length) marksEl.append(el('p', 'side-empty', markFilter === 'bookmark' ? 'No bookmarks yet.' : markFilter === 'highlight' ? 'No highlights yet.' : 'Nothing marked yet.'));
+    for (const p of prompts) { p.marked = null; p.row.querySelectorAll('.sw, .bk').forEach(x => x.remove()); }
+    for (const k of marks) { const p = promptFor(k.seq); if (p) (p.marked = p.marked || {})[k.kind] = true; }
+    for (const p of prompts) if (p.marked) {
+      if (p.marked.highlight) { const sw = el('span', 'sw'); sw.title = 'Has a highlight'; p.row.querySelector('.t').after(sw); }
+      if (p.marked.bookmark) { const bk = el('span', 'bk'); bk.innerHTML = BK; bk.title = 'Has a bookmark'; p.row.querySelector('.t').after(bk); }
+    }
+    if (prompts.length) filterToc();
+  }
+  const dropMark = id => api('DELETE', '/' + id).then(() => { unwrap(id); marks = marks.filter(k => k.id !== id); paintMarks(); });
+  chips($('mark-chips'), f => { markFilter = f; paintMarks(); });
+  marksEl.addEventListener('click', e => {
+    const d = e.target.closest('[data-del]'); if (d) return void dropMark(+d.dataset.del);
+    const g = e.target.closest('.go'); if (g) jump(+g.dataset.seq, +g.dataset.id);
+  });
+  chat.addEventListener('click', e => {                      // the bookmark icon beside a message
+    const b = e.target.closest('.bm'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const seq = +b.dataset.seq, had = marks.find(k => k.kind === 'bookmark' && k.seq === seq);
+    if (had) dropMark(had.id); else api('POST', '', {kind: 'bookmark', seq}).then(k => { marks.push(k); paintMarks(); });
+  });
+  // Selecting text inside one message offers "Highlight".
+  const bodyOf = n => { const e = n && (n.nodeType === 1 ? n : n.parentElement); return e ? e.closest('.body[data-seq]') : null; };
+  function offer() {
+    const sel = getSelection(); pending = null; hlBtn.hidden = true;
+    if (!sel.rangeCount || sel.isCollapsed) return;
+    const r = sel.getRangeAt(0).cloneRange(), body = bodyOf(r.startContainer);
+    if (!body || !chat.contains(body)) return;
+    if (!body.contains(r.endContainer)) r.setEnd(body, body.childNodes.length);          // ran past the message: keep the part inside it
+    let pos = 0, s = -1, e = -1, all = '';
+    for (const n of texts(body)) {
+      if (r.intersectsNode(n)) {
+        const a = n === r.startContainer ? r.startOffset : 0, b = n === r.endContainer ? r.endOffset : n.length;
+        if (b > a) { if (s < 0) s = pos + a; e = pos + b; }
+      }
+      pos += n.length; all += n.data;
+    }
+    if (s < 0 || !all.slice(s, e).trim()) return;
+    pending = {kind: 'highlight', seq: +body.dataset.seq, start: s, end: e, quote: all.slice(s, e)};
+    const box = r.getBoundingClientRect(), below = matchMedia('(pointer: coarse)').matches || box.top < 110;
+    hlBtn.hidden = false;
+    hlBtn.style.top = Math.min(innerHeight - 50, Math.max(60, below ? box.bottom + 10 : box.top - 42)) + 'px';
+    hlBtn.style.left = Math.min(innerWidth - hlBtn.offsetWidth - 8, Math.max(8, box.left + box.width / 2 - hlBtn.offsetWidth / 2)) + 'px';
+  }
+  let selTimer; document.addEventListener('selectionchange', () => { clearTimeout(selTimer); selTimer = setTimeout(offer, 160); });
+  hlBtn.addEventListener('mousedown', e => e.preventDefault());                          // keep the selection while pressing
+  hlBtn.addEventListener('click', () => { if (!pending) return; const p = pending;
+    api('POST', '', p).then(k => { marks.push(k); getSelection().removeAllRanges(); hlBtn.hidden = true; paintMarks(); }); });
+
+  fetch('/session/' + pk + '/toc?q=' + encodeURIComponent(Q)).then(r => r.json()).then(j => renderToc(j.entries))
+    .catch(() => { tocEl.textContent = ''; tocEl.append(el('p', 'side-empty', 'Could not load the contents.')); });
+  api('GET', '').then(j => { marks = j.marks; paintMarks(); }).catch(() => {});
+})();
+</script>
+{% endblock %}

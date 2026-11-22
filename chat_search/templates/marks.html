@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Marks — {{ brand }}{% endblock %}
+{% block body %}
+<h2 style="margin:0 0 4px">Bookmarks and highlights</h2>
+<p class="muted small" style="margin:0 0 14px">Everything you marked, by session. Open a session to add or remove marks.</p>
+{% for title, group in marks|groupby("session_pk") %}
+<div class="card">
+  <p style="margin:0 0 8px"><a href="/session/{{ group[0].session_pk }}"><strong>{{ group[0].title }}</strong></a> <span class="muted small">{{ group[0].project or '' }}</span></p>
+  {% for k in group %}
+  <p style="margin:6px 0; display:flex; gap:10px; align-items:baseline">
+    <span class="pill">{{ k.kind }}</span>
+    <a href="/session/{{ k.session_pk }}?around={{ k.seq }}#m{{ k.seq }}" style="flex:1; min-width:0; overflow-wrap:anywhere">{{ k.quote|truncate(260) }}</a>
+    <span class="muted small" style="white-space:nowrap">{{ k.ts|ts }}</span>
+  </p>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted">Nothing marked yet. In a session, select text to highlight it, or use the bookmark icon beside a message.</p>
+{% endfor %}
+{% endblock %}

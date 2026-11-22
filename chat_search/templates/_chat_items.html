@@ -1,0 +1,50 @@
+{# One page or chunk of chat items. Used by session_chat.html and by /session/<pk>/chunk. #}
+{% macro when(m) %}<a class="when" href="#m{{ m.seq }}" title="{{ m.ts|ts }} UTC · message #{{ m.seq }}">{% if m.ts %}<time datetime="{{ m.ts }}">{{ m.ts|ts }}</time>{% else %}#{{ m.seq }}{% endif %}</a>{% endmacro %}
+{% macro bm(m) %}<button type="button" class="bm" data-seq="{{ m.seq }}" aria-pressed="false" aria-label="Bookmark message #{{ m.seq }}" title="Bookmark"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4 2.5h8V14l-4-3-4 3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>{% endmacro %}
+{% macro cut(m) %}{% if m.cut %}<p class="muted small">Only the first 60 kB of {{ (m.text|length / 1000)|round|int }} kB is shown. <a href="/session/{{ s.id }}/m/{{ m.seq }}?q={{ q|urlencode }}">Open the full message</a></p>{% endif %}{% endmacro %}
+{% for it in items %}{% set m = it.m %}
+{% if it.type == "human" %}
+  <div class="turn-human{% if m.long %} collapsed{% endif %}" id="m{{ m.seq }}" data-ts="{{ m.ts or '' }}">
+    <div class="bubble md"><div class="body" data-seq="{{ m.seq }}">{{ m.html }}</div>{{ cut(m) }}</div>
+    <span class="foot">{% if m.long %}<button type="button" class="more link">show all</button> {% endif %}{{ bm(m) }}{{ when(m) }}</span>
+  </div>
+{% elif it.type == "assistant" %}
+  <div class="turn-assistant" id="m{{ m.seq }}" data-ts="{{ m.ts or '' }}">
+    <div class="md"><div class="body" data-seq="{{ m.seq }}">{{ m.html }}</div>{{ cut(m) }}</div>
+    <span class="foot">{{ when(m) }}{{ bm(m) }}</span>
+  </div>
+{% elif it.type == "steps" %}
+  <div class="steps" data-ts="{{ m.ts or '' }}">
+  {% for r in it.rows %}{% set m = r.m %}
+    <details class="step {{ r.type }}{% if m.is_error or (r.result and r.result.is_error) %} error{% endif %}" id="m{{ m.seq }}"{% if r.type == "tool" and m.uuid %} data-call="{{ m.uuid }}"{% elif r.type == "result" and m.tool %} data-result-of="{{ m.tool }}"{% endif %}>
+      <summary>
+        <span class="tool">{% if r.type == "thinking" %}Thinking{% elif r.type == "result" %}Result{% else %}{{ m.tool or 'Tool' }}{% endif %}</span>
+        <span class="what">{{ r.summary }}</span>
+        {% if r.hit %}<span class="tag hit">match</span>{% endif %}
+        {% if m.is_error or (r.result and r.result.is_error) %}<span class="tag bad">error</span>{% endif %}
+        {{ bm(m) }}{{ when(m) }}
+      </summary>
+      <div class="io">
+        {% if r.type == "tool" %}<h6>Input</h6>{% endif %}
+        <div><div class="body" data-seq="{{ m.seq }}">{{ m.html }}</div>{{ cut(m) }}</div>
+        {% if r.result %}
+        <div class="out" id="m{{ r.result.seq }}"><h6>Output <a class="when" href="#m{{ r.result.seq }}">#{{ r.result.seq }}</a></h6>
+        {% if r.result.text.strip() %}<div class="body" data-seq="{{ r.result.seq }}">{{ r.result.html }}</div>{{ cut(r.result) }}{% else %}<p class="muted small" style="margin:4px 0 0">No output.</p>{% endif %}</div>
+        {% endif %}
+      </div>
+    </details>
+  {% endfor %}
+  </div>
+{% elif it.type == "note" %}
+  {% if it.short %}
+  <div class="note" id="m{{ m.seq }}" data-ts="{{ m.ts or '' }}">{{ m.text.strip() }}</div>
+  {% else %}
+  <details class="note" id="m{{ m.seq }}" data-ts="{{ m.ts or '' }}">
+    <summary><b>{{ it.label }}</b>{% if it.summary %} · {{ it.summary }}{% endif %}{% if it.hit %} <span class="tag hit">match</span>{% endif %}</summary>
+    <div class="io"><div class="body" data-seq="{{ m.seq }}">{{ m.html }}</div>{{ cut(m) }}</div>
+  </details>
+  {% endif %}
+{% else %}
+  <span class="anchor" id="m{{ m.seq }}"></span>
+{% endif %}
+{% endfor %}

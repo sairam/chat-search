@@ -20,12 +20,14 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import ChoiceLoader, FileSystemLoader
 from markupsafe import Markup, escape
 
-from .render import fmt_ts, fts_query, highlight, human_bytes, next_day, render_text
+from .render import chat_items, first_line, fmt_ts, fts_query, highlight, human_bytes, next_day, render_text, toc_entries, tool_summary
 from .store import KINDS, QuotaExceeded, Store, now_iso
 
 HERE = Path(__file__).parent
 PAGE = 200            # messages per session page — a full session can be 10k+ messages / 100 MB
 MAX_RENDER = 60_000   # chars of one message rendered inline; the rest is behind /session/{pk}/m/{seq}
+CHUNK = 100           # chat view: messages per on-demand load (earlier / later)
+AROUND = (40, 80)     # chat view: messages before / from a search hit on first load
 HOOK_NAME = "chat-search-push"
 
 
@@ -45,6 +47,10 @@ class Settings:
     admins: set = field(default_factory=lambda: {
         u.strip() for u in os.environ.get("CHAT_SEARCH_ADMINS", "").split(",") if u.strip()})
     brand: str = field(default_factory=lambda: os.environ.get("CHAT_SEARCH_BRAND", "chat-search"))
+    # "classic": every message is a labelled box, in transcript order.
+    # "chat": a session reads like a conversation (prompts as bubbles, replies
+    # as prose, tool calls folded into one-line steps).
+    ui: str = field(default_factory=lambda: os.environ.get("CHAT_SEARCH_UI", "classic"))
 
 
 def create_app(settings: Settings | None = None, *,
@@ -69,7 +75,7 @@ def create_app(settings: Settings | None = None, *,
                                         + [FileSystemLoader(str(HERE / "templates"))])
     templates.env.filters["ts"] = fmt_ts
     templates.env.filters["bytes"] = human_bytes
-    templates.env.globals.update(KINDS=KINDS, brand=st.brand, nav_links=nav_links, hook_name=HOOK_NAME)
+    templates.env.globals.update(KINDS=KINDS, brand=st.brand, ui=st.ui, nav_links=nav_links, hook_name=HOOK_NAME)
 
     if identity is None:
         if st.auth == "proxy":
@@ -209,9 +215,12 @@ def create_app(settings: Settings | None = None, *,
         return RedirectResponse("/?msg=" + quote(msg), status_code=303)
 
     @app.get("/search", response_class=HTMLResponse)
-    def search(request: Request, q: str = "", kind: list[str] | None = Query(default=None), session: int | None = None,
+    def search(request: Request, q: str = "", kind: list[str] | None = Query(default=None),
+               session_raw: str = Query("", alias="session"),
                date_from: str = "", date_to: str = "", tool: str = "", limit: int = 100, page_no: int = Query(1, alias="page")):
         user = who(request)
+        # The filter form sends session= (empty) for "all"; anything not a number means all.
+        session = int(session_raw) if session_raw.strip().isdigit() else None
         kinds = [k for k in (kind or []) if k in KINDS]
         match = fts_query(q)
         hits, total = [], 0
@@ -246,39 +255,24 @@ def create_app(settings: Settings | None = None, *,
                     date_to=date_to, tool=tool, hits=hits, total=total, limit=limit, page=page_no,
                     sessions=sessions, pages=(total + limit - 1) // limit if total else 0)
 
-    @app.get("/session/{pk}", response_class=HTMLResponse)
-    def session_view(request: Request, pk: int, q: str = "", kind: list[str] | None = Query(default=None),
-                     date_from: str = "", date_to: str = "", page_no: int = Query(1, alias="page"),
-                     around: int | None = None):
-        user = who(request)
-        kinds = [k for k in (kind or []) if k in KINDS]
-        with store.db() as conn:
-            s = _session_for(conn, pk, user)
-            if not s:
-                return PlainTextResponse("no such session", status_code=404)
-            where, args = ["session_pk = ?"], [pk]
-            if kinds:
-                where.append("kind IN (%s)" % ",".join("?" * len(kinds))); args += kinds
-            if date_from:
-                where.append("ts >= ?"); args.append(date_from)
-            if date_to:
-                where.append("ts < ?"); args.append(next_day(date_to))
-            cond = " AND ".join(where)
-            total = conn.execute("SELECT COUNT(*) FROM messages WHERE " + cond, args).fetchone()[0]
-            pages = max(1, (total + PAGE - 1) // PAGE)
-            if around is not None:            # a search hit: open the page that holds #m<seq>
-                before = conn.execute("SELECT COUNT(*) FROM messages WHERE %s AND seq < ?" % cond,
-                                      args + [around]).fetchone()[0]
-                page_no = before // PAGE + 1
-            page_no = max(1, min(page_no, pages))
-            rows = conn.execute("SELECT * FROM messages WHERE %s ORDER BY seq LIMIT ? OFFSET ?" % cond,
-                                args + [PAGE, (page_no - 1) * PAGE]).fetchall()
-            ids = [r["tool"] for r in rows if r["kind"] == "tool_result" and r["tool"]]
-            tool_names = {}
-            if ids:
-                tool_names = {r["uuid"]: r["tool"] for r in conn.execute(
-                    "SELECT uuid, tool FROM messages WHERE session_pk = ? AND kind = 'tool_use' AND uuid IN (%s)"
-                    % ",".join("?" * len(ids)), [pk] + ids)}
+    def _msg_filter(pk: int, kinds: list, date_from: str, date_to: str):
+        where, args = ["session_pk = ?"], [pk]
+        if kinds:
+            where.append("kind IN (%s)" % ",".join("?" * len(kinds))); args += kinds
+        if date_from:
+            where.append("ts >= ?"); args.append(date_from)
+        if date_to:
+            where.append("ts < ?"); args.append(next_day(date_to))
+        return " AND ".join(where), args
+
+    def _msgs(conn, pk: int, rows, q: str) -> list[dict]:
+        """Rows → render-ready dicts (html, highlight, the tool name on a result)."""
+        ids = [r["tool"] for r in rows if r["kind"] == "tool_result" and r["tool"]]
+        tool_names = {}
+        if ids:
+            tool_names = {r["uuid"]: r["tool"] for r in conn.execute(
+                "SELECT uuid, tool FROM messages WHERE session_pk = ? AND kind = 'tool_use' AND uuid IN (%s)"
+                % ",".join("?" * len(ids)), [pk] + ids)}
         msgs = []
         for r in rows:
             text, cut = r["text"], len(r["text"]) > MAX_RENDER
@@ -288,9 +282,158 @@ def create_app(settings: Settings | None = None, *,
             msgs.append({**dict(r), "html": html, "cut": cut,
                          "label": tool_names.get(r["tool"], "") if r["kind"] == "tool_result" else r["tool"],
                          "long": len(text) > 1500})
-        return page(request, "session.html", user, s=s, msgs=msgs, q=q, kinds=kinds, date_from=date_from,
+        return msgs
+
+    @app.get("/session/{pk}", response_class=HTMLResponse)
+    def session_view(request: Request, pk: int, q: str = "", kind: list[str] | None = Query(default=None),
+                     date_from: str = "", date_to: str = "", page_no: int = Query(1, alias="page"),
+                     around: int | None = None):
+        user = who(request)
+        kinds = [k for k in (kind or []) if k in KINDS]
+        chat = st.ui == "chat"
+        with store.db() as conn:
+            s = _session_for(conn, pk, user)
+            if not s:
+                return PlainTextResponse("no such session", status_code=404)
+            cond, args = _msg_filter(pk, kinds, date_from, date_to)
+            total = conn.execute("SELECT COUNT(*) FROM messages WHERE " + cond, args).fetchone()[0]
+            pages = max(1, (total + PAGE - 1) // PAGE)
+            sel = "SELECT * FROM messages WHERE %s " % cond
+            if chat and around is not None:   # a search hit, chat view: a window around it; the rest loads on demand
+                rows = conn.execute(sel + "AND seq < ? ORDER BY seq DESC LIMIT ?", args + [around, AROUND[0]]).fetchall()[::-1]
+                rows += conn.execute(sel + "AND seq >= ? ORDER BY seq LIMIT ?", args + [around, AROUND[1]]).fetchall()
+            else:
+                if around is not None:        # a search hit: open the page that holds #m<seq>
+                    before = conn.execute("SELECT COUNT(*) FROM messages WHERE %s AND seq < ?" % cond,
+                                          args + [around]).fetchone()[0]
+                    page_no = before // PAGE + 1
+                page_no = max(1, min(page_no, pages))
+                rows = conn.execute(sel + "ORDER BY seq LIMIT ? OFFSET ?", args + [PAGE, (page_no - 1) * PAGE]).fetchall()
+            has_before = has_after = False
+            if chat and rows:
+                has_before = bool(conn.execute(sel + "AND seq < ? LIMIT 1", args + [rows[0]["seq"]]).fetchone())
+                has_after = bool(conn.execute(sel + "AND seq > ? LIMIT 1", args + [rows[-1]["seq"]]).fetchone())
+            msgs = _msgs(conn, pk, rows, q)
+        return page(request, "session_chat.html" if chat else "session.html", user, s=s, msgs=msgs,
+                    items=chat_items(msgs) if chat else [], has_before=has_before, has_after=has_after,
+                    q=q, kinds=kinds, date_from=date_from,
                     date_to=date_to, page=page_no, pages=pages, total=total, per=PAGE, max_render=MAX_RENDER,
                     first_seq=rows[0]["seq"] if rows else None, last_seq=rows[-1]["seq"] if rows else None)
+
+    @app.get("/session/{pk}/chunk")
+    def session_chunk(request: Request, pk: int, before: int | None = None, after: int | None = None, q: str = "",
+                      kind: list[str] | None = Query(default=None), date_from: str = "", date_to: str = ""):
+        """Chat view, loading on demand: the CHUNK messages just before or just
+        after a seq, as rendered items. `more` says whether that side has further messages."""
+        user = who(request)
+        kinds = [k for k in (kind or []) if k in KINDS]
+        if (before is None) == (after is None):
+            return JSONResponse({"error": "give before or after"}, status_code=400)
+        with store.db() as conn:
+            s = _session_for(conn, pk, user)
+            if not s:
+                return JSONResponse({"error": "no such session"}, status_code=404)
+            cond, args = _msg_filter(pk, kinds, date_from, date_to)
+            sel = "SELECT * FROM messages WHERE %s " % cond
+            if before is not None:
+                rows = conn.execute(sel + "AND seq < ? ORDER BY seq DESC LIMIT ?", args + [before, CHUNK + 1]).fetchall()
+                more, rows = len(rows) > CHUNK, rows[:CHUNK][::-1]
+            else:
+                rows = conn.execute(sel + "AND seq > ? ORDER BY seq LIMIT ?", args + [after, CHUNK + 1]).fetchall()
+                more, rows = len(rows) > CHUNK, rows[:CHUNK]
+            msgs = _msgs(conn, pk, rows, q)
+        html = templates.get_template("_chat_items.html").render(s=s, q=q, items=chat_items(msgs))
+        return {"html": html, "more": more, "first": rows[0]["seq"] if rows else None,
+                "last": rows[-1]["seq"] if rows else None}
+
+    @app.get("/session/{pk}/toc")
+    def session_toc(request: Request, pk: int, q: str = ""):
+        """Chat view: the contents panel. Covers the whole session, not the part loaded."""
+        user = who(request)
+        with store.db() as conn:
+            if not _session_for(conn, pk, user):
+                return JSONResponse({"error": "no such session"}, status_code=404)
+            rows = conn.execute("SELECT seq, ts, kind, tool, is_error, substr(text, 1, 400) AS head"
+                                " FROM messages WHERE session_pk = ? ORDER BY seq", (pk,)).fetchall()
+            hits, match = set(), fts_query(q)
+            if match:
+                hits = {r[0] for r in conn.execute(
+                    "SELECT m.seq FROM messages_fts f JOIN messages m ON m.id = f.rowid"
+                    " WHERE messages_fts MATCH ? AND m.session_pk = ?", (match, pk))}
+        return {"entries": toc_entries(rows, hits)}
+
+    # ── bookmarks + highlights (chat view) ─────────────────────────────────
+
+    MARK_SQL = ("SELECT k.id, k.seq, k.kind, k.pos_start, k.pos_end, k.quote, k.created_at, m.ts"
+                " FROM marks k LEFT JOIN messages m ON m.session_pk = k.session_pk AND m.seq = k.seq"
+                " WHERE k.session_pk = ? AND k.owner = ?")
+
+    @app.get("/session/{pk}/marks")
+    def marks_list(request: Request, pk: int):
+        user = who(request)
+        with store.db() as conn:
+            if not _session_for(conn, pk, user):
+                return JSONResponse({"error": "no such session"}, status_code=404)
+            rows = conn.execute(MARK_SQL + " ORDER BY k.seq, k.pos_start", (pk, user)).fetchall()
+        return {"marks": [dict(r) for r in rows]}
+
+    @app.post("/session/{pk}/marks")
+    async def marks_add(request: Request, pk: int):
+        """JSON body {kind: "bookmark", seq} or {kind: "highlight", seq, start, end, quote}.
+        JSON only: a cross-site form cannot send it."""
+        user = who(request)
+        if "application/json" not in request.headers.get("content-type", ""):
+            return JSONResponse({"error": "send JSON"}, status_code=415)
+        try:
+            d = await request.json()
+            kind, seq = d["kind"], int(d["seq"])
+            start = end = None
+            quote = ""
+            if kind == "highlight":
+                start, end, quote = int(d["start"]), int(d["end"]), str(d["quote"])
+                if not quote.strip() or len(quote) > 20_000 or not 0 <= start < end:
+                    raise ValueError
+            elif kind != "bookmark":
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            return JSONResponse({"error": "bad mark"}, status_code=400)
+        with store.db() as conn:
+            m = _session_for(conn, pk, user) and conn.execute(
+                "SELECT kind, tool, substr(text, 1, 600) AS head FROM messages WHERE session_pk = ? AND seq = ?",
+                (pk, seq)).fetchone()
+            if not m:
+                return JSONResponse({"error": "no such message"}, status_code=404)
+            if kind == "bookmark":
+                old = conn.execute("SELECT id FROM marks WHERE session_pk = ? AND owner = ? AND seq = ?"
+                                   " AND kind = 'bookmark'", (pk, user, seq)).fetchone()
+                if old:
+                    return dict(conn.execute(MARK_SQL + " AND k.id = ?", (pk, user, old["id"])).fetchone())
+                quote = ("%s · %s" % (m["tool"] or "Tool", tool_summary(m["tool"], m["head"]))
+                         if m["kind"] == "tool_use" else first_line(m["head"], 200)) or "Message #%d" % seq
+            cur = conn.execute("INSERT INTO marks (owner, session_pk, seq, kind, pos_start, pos_end, quote, created_at)"
+                               " VALUES (?,?,?,?,?,?,?,?)", (user, pk, seq, kind, start, end, quote, now_iso()))
+            return dict(conn.execute(MARK_SQL + " AND k.id = ?", (pk, user, cur.lastrowid)).fetchone())
+
+    @app.delete("/session/{pk}/marks/{mark_id}")
+    def marks_delete(request: Request, pk: int, mark_id: int):
+        user = who(request)
+        with store.db() as conn:
+            conn.execute("DELETE FROM marks WHERE id = ? AND session_pk = ? AND owner = ?", (mark_id, pk, user))
+        return {"ok": True}
+
+    @app.get("/marks", response_class=HTMLResponse)
+    def marks_page(request: Request):
+        """Every bookmark and highlight of this user, across sessions."""
+        user = who(request)
+        w, a = _scope(user)
+        with store.db() as conn:
+            rows = conn.execute(
+                "SELECT k.id, k.seq, k.kind, k.quote, k.created_at, m.ts, s.id AS session_pk, s.title, s.project"
+                " FROM marks k JOIN sessions s ON s.id = k.session_pk"
+                " LEFT JOIN messages m ON m.session_pk = k.session_pk AND m.seq = k.seq"
+                " WHERE k.owner = ? AND %s ORDER BY COALESCE(s.last_ts, s.uploaded_at) DESC, s.id, k.seq, k.pos_start"
+                % w.replace("owner", "s.owner"), [user] + a).fetchall()
+        return page(request, "marks.html", user, marks=rows)
 
     @app.get("/session/{pk}/m/{seq}", response_class=HTMLResponse)
     def message_view(request: Request, pk: int, seq: int, q: str = ""):
