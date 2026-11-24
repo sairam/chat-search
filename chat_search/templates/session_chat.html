@@ -90,11 +90,27 @@ details.note[open] > summary { margin-bottom:8px; white-space:normal; }
 details.note .io { border:1px solid var(--line); border-radius:10px; background:var(--card); padding:10px 12px; color:var(--fg); max-height:480px; overflow:auto; }
 details.note .io pre { font-size:12.5px; }
 
-.target > .bubble, .turn-assistant.target, .step.target, .note.target { animation:flash 2.4s ease-out 1; }
-.turn-assistant.target { border-radius:8px; }
-.turn-assistant.target { animation-name:flash-out; }
-@keyframes flash { 0%, 35% { box-shadow:0 0 0 3px var(--mark); } 100% { box-shadow:0 0 0 3px transparent; } }
-@keyframes flash-out { 0%, 35% { box-shadow:0 0 0 8px var(--bg), 0 0 0 11px var(--mark); } 100% { box-shadow:0 0 0 8px var(--bg), 0 0 0 11px transparent; } }
+/* Where a message starts and ends.
+   - Any message: a light rail down its left side while the pointer is on it.
+   - The linked message (#m<seq> in the address, or after pressing a message's time): a frame that stays
+     until another message is picked or it is cleared, plus a small bar to reach its top and end. */
+:root { --tgt:color-mix(in srgb, var(--accent) 7%, var(--bg)); --tgt-line:color-mix(in srgb, var(--accent) 50%, var(--bg)); }
+.turn-assistant, .turn-human, .note { position:relative; }
+.turn-assistant::before, .turn-human::before { content:""; position:absolute; left:-12px; top:0; bottom:0; width:3px; border-radius:2px; background:transparent; transition:background .12s; pointer-events:none; }
+.turn-assistant:hover::before, .turn-human:hover::before { background:var(--line); }
+.step[open]:hover { box-shadow:inset 3px 0 0 var(--line); }
+.turn-assistant.target, .turn-human.target, .note.target { background:var(--tgt); border-radius:5px; box-shadow:0 0 0 9px var(--tgt), 0 0 0 10px var(--tgt-line); }
+.turn-assistant.target::before, .turn-human.target::before { left:-10px; background:var(--accent); border-radius:5px 0 0 5px; }
+.note.target { box-shadow:0 0 0 6px var(--tgt), 0 0 0 7px var(--tgt-line), -10px 0 0 -4px var(--accent); }
+.step.target, .step[open].target:hover { background:var(--tgt); box-shadow:inset 3px 0 0 var(--accent), inset 0 0 0 1px var(--tgt-line); }
+.step.target > summary:hover { background:none; }
+#tgt-chip { position:fixed; bottom:16px; left:16px; z-index:9; display:flex; align-items:center; gap:2px; background:var(--card); border:1px solid var(--tgt-line); border-left:3px solid var(--accent);
+  border-radius:8px; padding:3px 4px 3px 10px; font-size:12.5px; box-shadow:0 2px 10px rgba(0,0,0,.14); max-width:calc(100vw - 150px); }
+#tgt-chip[hidden] { display:none; }
+#tgt-chip span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-right:4px; }
+#tgt-chip button { border:0; background:none; padding:4px 8px; border-radius:6px; font-size:12.5px; color:var(--accent); }
+#tgt-chip button:hover { background:var(--soft); }
+#tgt-chip button[data-go=clear] { color:var(--muted); font-size:15px; line-height:1; padding:3px 8px; }
 body.no-steps .steps, body.no-steps .note { display:none; }
 @media (max-width:640px) {
   main { padding:14px 16px 50px; }
@@ -104,7 +120,7 @@ body.no-steps .steps, body.no-steps .note { display:none; }
   .chat [id] { scroll-margin-top:118px; }
   .step .io { padding-left:12px; }
 }
-@media (prefers-reduced-motion: reduce) { .target, .target > .bubble { animation:none !important; } .step > summary::before { transition:none; } }
+@media (prefers-reduced-motion: reduce) { .step > summary::before, .turn-assistant::before, .turn-human::before { transition:none; } }
 
 /* contents + marks panel */
 .layout { display:block; }
@@ -176,7 +192,25 @@ body.no-steps .steps, body.no-steps .note { display:none; }
 mark.hl { background:var(--hl); color:inherit; border-radius:2px; padding:0; }
 mark.hl.flash { animation:hlflash 2.2s ease-out 1; }
 @keyframes hlflash { 0%, 40% { box-shadow:0 0 0 3px var(--accent); } 100% { box-shadow:0 0 0 3px transparent; } }
-#hl-btn { position:fixed; z-index:15; background:var(--fg); color:var(--bg); border-color:var(--fg); border-radius:999px; padding:6px 14px; font-size:13px; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+#hl-btn { position:fixed; z-index:15; display:flex; background:var(--fg); border-radius:999px; padding:2px; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+#hl-btn[hidden] { display:none; }
+#hl-btn button { background:none; border:0; color:var(--bg); padding:5px 12px; font-size:13px; border-radius:999px; white-space:nowrap; }
+#hl-btn button:hover { background:rgba(128,128,128,.35); }
+#hl-btn button + button { border-left:1px solid rgba(128,128,128,.5); border-radius:0 999px 999px 0; }
+.cp { border:0; background:none; padding:2px; color:var(--muted); display:inline-flex; border-radius:4px; opacity:0; flex:none; }
+.cp:hover, .cp[aria-expanded=true] { color:var(--accent); opacity:1; }
+.turn-human:hover .cp, .turn-assistant:hover .cp, .step > summary:hover .cp, .cp:focus-visible { opacity:1; }
+@media (hover:none) { .cp { opacity:.55; } }
+#copy-menu { position:fixed; z-index:25; min-width:230px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:5px; box-shadow:0 6px 24px rgba(0,0,0,.18); font-size:13px; }
+#copy-menu[hidden] { display:none; }
+#copy-menu [role=menuitem] { display:block; width:100%; text-align:left; border:0; background:none; padding:7px 10px; border-radius:6px; font-size:13px; color:var(--fg); }
+#copy-menu [role=menuitem]:hover, #copy-menu [role=menuitem]:focus-visible { background:var(--soft); }
+#copy-menu [role=menuitem] small { display:block; color:var(--muted); font-size:11.5px; }
+#copy-menu .fmt { display:flex; align-items:center; gap:6px; margin-top:4px; padding:8px 10px 5px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+#copy-menu .fmt button { padding:2px 9px; border-radius:999px; font-size:12px; color:var(--muted); background:none; }
+#copy-menu .fmt button[aria-pressed=true] { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+#toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:30; background:var(--fg); color:var(--bg); padding:7px 16px; border-radius:999px; font-size:13px; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+#toast[hidden] { display:none; }
 .body > :first-child { margin-top:0; } .body > :last-child { margin-bottom:0; }
 @media (prefers-reduced-motion: reduce) { .side { transition:none; } mark.hl.flash { animation:none; } }
 </style>
@@ -217,7 +251,7 @@ mark.hl.flash { animation:hlflash 2.2s ease-out 1; }
 
 {% if items %}
 <a class="more-edge" id="more-before" href="{{ base }}&around={{ [first_seq - 1, 0]|max }}"{% if not has_before %} hidden{% endif %}>Load earlier messages</a>
-<div class="chat" id="chat" data-pk="{{ s.id }}" data-qs="{{ base[1:] }}" data-first="{{ first_seq }}" data-last="{{ last_seq }}">
+<div class="chat" id="chat" data-pk="{{ s.id }}" data-project="{{ s.project or '' }}" data-qs="{{ base[1:] }}" data-first="{{ first_seq }}" data-last="{{ last_seq }}">
 {% include "_chat_items.html" %}
 </div>
 <a class="more-edge" id="more-after" href="{{ base }}&around={{ last_seq + 1 }}"{% if not has_after %} hidden{% endif %}>Load later messages</a>
@@ -257,7 +291,16 @@ mark.hl.flash { animation:hlflash 2.2s ease-out 1; }
 </aside>
 <button type="button" id="side-open">Contents</button>
 <div id="side-shade" hidden></div>
-<button type="button" id="hl-btn" hidden>Highlight</button>
+<div id="hl-btn" hidden><button type="button" id="hl-do">Highlight</button><button type="button" id="hl-copy">Copy with reference</button></div>
+<div id="copy-menu" role="menu" aria-label="Copy" hidden>
+  <button type="button" role="menuitem" data-act="link">Copy link<small>To this page, at this message</small></button>
+  <button type="button" role="menuitem" data-act="ref">Copy reference<small>Session id, transcript path, line number, record id</small></button>
+  <button type="button" role="menuitem" data-act="message">Copy message with reference</button>
+  <button type="button" role="menuitem" data-act="turn">Copy request and response<small>The prompt and the replies of this turn, with reference</small></button>
+  <div class="fmt">Copy as <button type="button" data-fmt="rich" aria-pressed="true">Rich text</button><button type="button" data-fmt="plain" aria-pressed="false">Plain text</button></div>
+</div>
+<div id="toast" role="status" hidden></div>
+<div id="tgt-chip" role="group" aria-label="Linked message" hidden><span id="tgt-label"></span><button type="button" data-go="top">Top</button><button type="button" data-go="end">End</button><button type="button" data-go="clear" aria-label="Remove the frame" title="Remove the frame">×</button></div>
 {% endif %}
 </div>
 <script>
@@ -277,7 +320,7 @@ mark.hl.flash { animation:hlflash 2.2s ease-out 1; }
       const call = chat.querySelector('details.step.tool[data-call="' + CSS.escape(res.dataset.resultOf) + '"]');
       if (!call || call.querySelector('.out')) return;
       const out = el('div', 'out'), h = el('h6'), id = res.id, group = res.parentElement;
-      h.innerHTML = 'Output <a class="when" href="#' + id + '">#' + id.slice(1) + '</a>';
+      h.innerHTML = 'Output <a class="when" title="Copy link" href="/session/' + pk + '?around=' + id.slice(1) + '#' + id + '">#' + id.slice(1) + '</a>';
       out.append(h, ...res.querySelector('.io > div').childNodes);
       if (res.classList.contains('error')) call.classList.add('error');
       res.remove(); out.id = id; call.querySelector('.io').append(out);
@@ -305,11 +348,41 @@ mark.hl.flash { animation:hlflash 2.2s ease-out 1; }
   const reveal = (node, markId) => {                       // open whatever holds it, then show it
     for (let p = node; p && p !== chat; p = p.parentElement) { if (p.tagName === 'DETAILS') p.open = true; if (p.classList.contains('collapsed')) more(p); }
     const hl = markId && chat.querySelector('mark.hl[data-id="' + markId + '"]');
-    const box = hl || node.closest('.step, .note, .turn-human, .turn-assistant') || node, cls = hl ? 'flash' : 'target';
-    box.classList.remove(cls); void box.offsetWidth; box.classList.add(cls);
+    setTarget(node.closest('.step, .note, .turn-human, .turn-assistant') || node, node.id);
+    if (hl) { hl.classList.remove('flash'); void hl.offsetWidth; hl.classList.add('flash'); }
     (hl || node).scrollIntoView({block: hl || node.classList.contains('anchor') ? 'center' : 'start'});
   };
-  const go = () => { const node = location.hash.length > 1 && $(location.hash.slice(1)); if (node) reveal(node); };
+  // The linked message keeps a frame, and a small bar says how long it is and reaches its top and end.
+  const chip = $('tgt-chip'); let framed = null;
+  const sizeChip = () => { if (!framed) return;
+    const screens = framed.getBoundingClientRect().height / innerHeight, id = chip.dataset.id;
+    $('tgt-label').textContent = 'Linked message #' + id.slice(1) + (screens >= 1.15 ? ' · ' + (screens < 10 ? screens.toFixed(1) : Math.round(screens)) + ' screens long' : '');
+    chip.style.left = Math.max(16, chat.getBoundingClientRect().left) + 'px'; };
+  function setTarget(box, id) {
+    chat.querySelectorAll('.target').forEach(t => t.classList.remove('target'));
+    framed = box; chip.hidden = !box; if (!box) return;
+    box.classList.add('target'); chip.dataset.id = id; sizeChip();
+  }
+  chip.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b || !framed) return;
+    if (b.dataset.go === 'clear') { setTarget(null); history.replaceState(null, '', location.pathname + location.search); }
+    else framed.scrollIntoView({block: b.dataset.go === 'top' ? 'start' : 'end'}); });
+  addEventListener('resize', sizeChip);
+  chat.addEventListener('toggle', sizeChip, true);          // a step opened or closed: its length changed
+  const go = () => {
+    const id = location.hash.slice(1), node = id && $(id);
+    if (node) return reveal(node);
+    // A link to a message outside the part that is loaded: open the session at that message.
+    if (/^m\d+$/.test(id) && new URLSearchParams(location.search).get('around') !== id.slice(1)) location.replace('?' + qs + '&around=' + id.slice(1) + '#' + id);
+  };
+  // The time under a message is its permalink: pressing it copies the link and puts it in the address bar.
+  const toast = $('toast'); let toastTimer;
+  const say = text => { toast.textContent = text; toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, 1800); };
+  chat.addEventListener('click', e => {
+    const a = e.target.closest('a.when'); if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault();
+    history.replaceState(null, '', a.href); reveal($(a.hash.slice(1)));
+    (navigator.clipboard ? navigator.clipboard.writeText(a.href) : Promise.reject()).then(() => say('Link copied'), () => say('Link is in the address bar'));
+  });
   const jump = (seq, markId) => {
     const node = $('m' + seq);
     if (!node) { location.href = '?' + qs + '&around=' + seq + '#m' + seq; return; }     // not loaded: open the session there
@@ -522,8 +595,81 @@ mark.hl.flash { animation:hlflash 2.2s ease-out 1; }
   }
   let selTimer; document.addEventListener('selectionchange', () => { clearTimeout(selTimer); selTimer = setTimeout(offer, 160); });
   hlBtn.addEventListener('mousedown', e => e.preventDefault());                          // keep the selection while pressing
-  hlBtn.addEventListener('click', () => { if (!pending) return; const p = pending;
+  $('hl-do').addEventListener('click', () => { if (!pending) return; const p = pending;
     api('POST', '', p).then(k => { marks.push(k); getSelection().removeAllRanges(); hlBtn.hidden = true; paintMarks(); }); });
+
+  // ── copying, always with where it came from, so it can be handed to Claude or shared ──
+  // Rich text puts formatted HTML on the clipboard with Markdown beside it (the app pasted into picks); plain text is the Markdown only.
+  const menu = $('copy-menu'), title = document.querySelector('.s-head h1').textContent.trim();
+  const esc = t => t.replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const linkTo = seq => location.origin + '/session/' + pk + '?around=' + seq + '#m' + seq;
+  const fence = t => { let f = '```'; while (t.includes(f)) f += '`'; return f + '\n' + t.replace(/\n+$/, '') + '\n' + f; };
+  let fmt = pref('cs.copy.fmt') === 'plain' ? 'plain' : 'rich';
+  const setFmt = f => { fmt = f; pref('cs.copy.fmt', f); menu.querySelectorAll('[data-fmt]').forEach(b => b.setAttribute('aria-pressed', b.dataset.fmt === f)); };
+  setFmt(fmt);
+  // parts: promise of {md, html}. Promises go into the ClipboardItem so the write still counts as part of the click.
+  const put = parts => {
+    const blob = (key, type) => parts.then(p => new Blob([p[key]], {type}));
+    const types = fmt === 'rich' ? {'text/plain': blob('md', 'text/plain'), 'text/html': blob('html', 'text/html')} : {'text/plain': blob('md', 'text/plain')};
+    let done;
+    try { done = navigator.clipboard.write([new ClipboardItem(types)]); }
+    catch (e) { done = parts.then(p => navigator.clipboard.writeText(p.md)); }             // no ClipboardItem here: plain text
+    return done.then(() => say(fmt === 'rich' ? 'Copied as rich text' : 'Copied as plain text'), () => say('Could not copy'));
+  };
+  // The reference points into Claude Code's own files, so another Claude session can open the transcript at that line.
+  const source = (d, seq) => {
+    const r = d.ref, at = d.items.find(i => i.seq === seq) || d.items[0], ln = d.items.map(i => i.line).filter(Boolean);
+    const lines = !ln.length ? 'message #' + seq + ' (line not found)' : ln.length === 1 || Math.min(...ln) === Math.max(...ln) ? 'line ' + ln[0] : 'lines ' + Math.min(...ln) + '–' + Math.max(...ln);
+    const rows = [
+      ['Source', 'Claude Code session ' + r.session_id + (r.agent ? ', subagent ' + r.agent : '') + ' ("' + r.title + '")'],
+      ['Transcript', r.path + ', ' + lines],
+      ['Record', (at.kind === 'tool_use' ? 'tool_use id ' : 'uuid ') + (at.uuid || 'none') + (at.line && ln.length > 1 ? ' (line ' + at.line + ')' : '') + (at.ts ? ', ' + at.ts + ' UTC' : '') + (r.cwd ? ', cwd ' + r.cwd : '')],
+      ['Resume', 'claude --resume ' + r.session_id + (r.cwd ? '  (run in ' + r.cwd + ')' : '')],
+    ];
+    return {md: rows.map(([k, v]) => k + ': ' + v).join('\n'),
+            html: '<p>' + rows.map(([k, v]) => '<em>' + k + ':</em> ' + (k === 'Source' ? esc(v) : '<code>' + esc(v) + '</code>')).join('<br>') + '</p>'};
+  };
+  const NAME = {human: 'Request', assistant: 'Response', tool_result: 'Output', thinking: 'Thinking', system: 'System note', summary: 'Summary'};
+  const compose = (d, seq, scope) => {
+    const src = source(d, seq), md = [], html = [];
+    for (const i of d.items) {
+      const name = i.kind === 'tool_use' ? (i.tool || 'Tool') + ' call' : NAME[i.kind] || i.kind, code = i.kind.startsWith('tool_'), at = i.line ? 'line ' + i.line : '#' + i.seq;
+      md.push('**' + name + '** (' + at + ')\n\n' + (code ? fence(i.text) : i.text.trim()));
+      html.push('<p><strong>' + esc(name) + '</strong> (' + at + ')</p>' + i.html);
+    }
+    if (scope === 'turn' && d.steps) { const n = d.steps + ' tool call' + (d.steps === 1 ? '' : 's') + ' in this turn left out; the transcript has them.'; md.push('_' + n + '_'); html.push('<p><em>' + n + '</em></p>'); }
+    return {md: md.join('\n\n') + '\n\n' + src.md + '\n', html: html.join('') + src.html};
+  };
+  const pull = (seq, scope) => fetch('/session/' + pk + '/copy?seq=' + seq + '&scope=' + scope).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+  let menuFor = null, menuAt = 0;
+  const closeMenu = () => { if (menuFor) menuFor.removeAttribute('aria-expanded'); menu.hidden = true; menuFor = null; };
+  chat.addEventListener('click', e => {
+    const b = e.target.closest('.cp'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    if (menuFor === b) return closeMenu();
+    closeMenu(); menuFor = b; menuAt = performance.now(); b.setAttribute('aria-expanded', 'true'); menu.hidden = false;
+    const r = b.getBoundingClientRect();
+    menu.style.left = Math.min(innerWidth - menu.offsetWidth - 8, Math.max(8, r.left - 20)) + 'px';
+    menu.style.top = (r.bottom + menu.offsetHeight + 12 > innerHeight ? Math.max(8, r.top - menu.offsetHeight - 6) : r.bottom + 6) + 'px';
+    menu.querySelector('[role=menuitem]').focus({preventScroll: true});
+  });
+  menu.addEventListener('click', e => {
+    const f = e.target.closest('[data-fmt]'); if (f) return setFmt(f.dataset.fmt);
+    const item = e.target.closest('[data-act]'); if (!item || !menuFor) return;
+    const seq = +menuFor.dataset.seq, act = item.dataset.act, was = fmt;
+    if (act === 'link') { fmt = 'plain'; put(Promise.resolve({md: linkTo(seq)})).then(() => say('Link copied')); fmt = was; }
+    else if (act === 'ref') put(pull(seq, 'ref').then(d => source(d, seq)));
+    else put(pull(seq, act).then(d => compose(d, seq, act)));
+    closeMenu();
+  });
+  document.addEventListener('click', e => { if (!menu.hidden && !e.target.closest('#copy-menu, .cp')) closeMenu(); });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { const b = menuFor; closeMenu(); if (b) b.focus(); } });
+  addEventListener('scroll', () => { if (!menu.hidden && performance.now() - menuAt > 250) closeMenu(); }, {passive: true});
+  // A selection copies as a quote with its reference.
+  $('hl-copy').addEventListener('click', () => { if (!pending) return; const p = pending, q = p.quote.trim();
+    put(pull(p.seq, 'ref').then(d => { const src = source(d, p.seq);
+      return {md: q.split('\n').map(l => '> ' + l).join('\n') + '\n\n' + src.md + '\n', html: '<blockquote>' + esc(q).replace(/\n/g, '<br>') + '</blockquote>' + src.html}; }));
+    hlBtn.hidden = true; });
 
   fetch('/session/' + pk + '/toc?q=' + encodeURIComponent(Q)).then(r => r.json()).then(j => renderToc(j.entries))
     .catch(() => { tocEl.textContent = ''; tocEl.append(el('p', 'side-empty', 'Could not load the contents.')); });

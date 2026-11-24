@@ -308,6 +308,29 @@ class Store:
                 " VALUES (?,?,?,?,?,?,?,?)", [(pk, *r) for r in rows])
         return pk, True
 
+    def locate(self, sha: str, ids: dict) -> dict:
+        """Line numbers (1-based) in the raw transcript for messages. ids maps a
+        key to (kind, uuid) as stored: a tool call carries its tool_use id, every
+        other message its record's uuid. One pass over the file; keys not found
+        are left out. Transcripts only grow, so a line number stays valid in the
+        original file on the machine it came from."""
+        want = {}
+        for key, (kind, uuid) in ids.items():
+            if uuid:
+                want.setdefault(('"id":"%s"' if kind == "tool_use" else '"uuid":"%s"') % uuid, []).append(key)
+        found, needles = {}, {n.encode(): keys for n, keys in want.items()}
+        path = self.uploads / f"{sha}.jsonl"
+        if not needles or not path.exists():
+            return found
+        with path.open("rb") as fh:
+            for no, line in enumerate(fh, 1):
+                for n in [n for n in needles if n in line]:
+                    for key in needles.pop(n):
+                        found[key] = no
+                if not needles:
+                    break
+        return found
+
     def delete_session(self, conn, s) -> None:
         conn.execute("DELETE FROM messages WHERE session_pk = ?", (s["id"],))
         conn.execute("DELETE FROM marks WHERE session_pk = ?", (s["id"],))

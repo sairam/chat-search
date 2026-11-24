@@ -1,17 +1,18 @@
 {# One page or chunk of chat items. Used by session_chat.html and by /session/<pk>/chunk. #}
-{% macro when(m) %}<a class="when" href="#m{{ m.seq }}" title="{{ m.ts|ts }} UTC · message #{{ m.seq }}">{% if m.ts %}<time datetime="{{ m.ts }}">{{ m.ts|ts }}</time>{% else %}#{{ m.seq }}{% endif %}</a>{% endmacro %}
+{% macro when(m) %}<a class="when" href="/session/{{ s.id }}?around={{ m.seq }}#m{{ m.seq }}" title="{{ m.ts|ts }} UTC · message #{{ m.seq }} · copy link">{% if m.ts %}<time datetime="{{ m.ts }}">{{ m.ts|ts }}</time>{% else %}#{{ m.seq }}{% endif %}</a>{% endmacro %}
 {% macro bm(m) %}<button type="button" class="bm" data-seq="{{ m.seq }}" aria-pressed="false" aria-label="Bookmark message #{{ m.seq }}" title="Bookmark"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4 2.5h8V14l-4-3-4 3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>{% endmacro %}
+{% macro cp(m) %}<button type="button" class="cp" data-seq="{{ m.seq }}" aria-haspopup="menu" aria-label="Copy message #{{ m.seq }}" title="Copy"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 3.2v-.2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>{% endmacro %}
 {% macro cut(m) %}{% if m.cut %}<p class="muted small">Only the first 60 kB of {{ (m.text|length / 1000)|round|int }} kB is shown. <a href="/session/{{ s.id }}/m/{{ m.seq }}?q={{ q|urlencode }}">Open the full message</a></p>{% endif %}{% endmacro %}
 {% for it in items %}{% set m = it.m %}
 {% if it.type == "human" %}
   <div class="turn-human{% if m.long %} collapsed{% endif %}" id="m{{ m.seq }}" data-ts="{{ m.ts or '' }}">
     <div class="bubble md"><div class="body" data-seq="{{ m.seq }}">{{ m.html }}</div>{{ cut(m) }}</div>
-    <span class="foot">{% if m.long %}<button type="button" class="more link">show all</button> {% endif %}{{ bm(m) }}{{ when(m) }}</span>
+    <span class="foot">{% if m.long %}<button type="button" class="more link">show all</button> {% endif %}{{ cp(m) }}{{ bm(m) }}{{ when(m) }}</span>
   </div>
 {% elif it.type == "assistant" %}
   <div class="turn-assistant" id="m{{ m.seq }}" data-ts="{{ m.ts or '' }}">
     <div class="md"><div class="body" data-seq="{{ m.seq }}">{{ m.html }}</div>{{ cut(m) }}</div>
-    <span class="foot">{{ when(m) }}{{ bm(m) }}</span>
+    <span class="foot">{{ when(m) }}{{ bm(m) }}{{ cp(m) }}</span>
   </div>
 {% elif it.type == "steps" %}
   <div class="steps" data-ts="{{ m.ts or '' }}">
@@ -22,13 +23,13 @@
         <span class="what">{{ r.summary }}</span>
         {% if r.hit %}<span class="tag hit">match</span>{% endif %}
         {% if m.is_error or (r.result and r.result.is_error) %}<span class="tag bad">error</span>{% endif %}
-        {{ bm(m) }}{{ when(m) }}
+        {{ cp(m) }}{{ bm(m) }}{{ when(m) }}
       </summary>
       <div class="io">
         {% if r.type == "tool" %}<h6>Input</h6>{% endif %}
         <div><div class="body" data-seq="{{ m.seq }}">{{ m.html }}</div>{{ cut(m) }}</div>
         {% if r.result %}
-        <div class="out" id="m{{ r.result.seq }}"><h6>Output <a class="when" href="#m{{ r.result.seq }}">#{{ r.result.seq }}</a></h6>
+        <div class="out" id="m{{ r.result.seq }}"><h6>Output <a class="when" href="/session/{{ s.id }}?around={{ r.result.seq }}#m{{ r.result.seq }}" title="Copy link">#{{ r.result.seq }}</a></h6>
         {% if r.result.text.strip() %}<div class="body" data-seq="{{ r.result.seq }}">{{ r.result.html }}</div>{{ cut(r.result) }}{% else %}<p class="muted small" style="margin:4px 0 0">No output.</p>{% endif %}</div>
         {% endif %}
       </div>

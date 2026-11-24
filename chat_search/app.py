@@ -7,6 +7,7 @@ may store, are pluggable so the same core serves a single-user local install
 (X-Remote-User), or a hosted multi-tenant service with accounts and quotas.
 """
 import hashlib
+import re
 import os
 import secrets
 from dataclasses import dataclass, field
@@ -378,6 +379,61 @@ def create_app(settings: Settings | None = None, *,
                     "SELECT m.seq FROM messages_fts f JOIN messages m ON m.id = f.rowid"
                     " WHERE messages_fts MATCH ? AND m.session_pk = ?", (match, pk))}
         return {"entries": toc_entries(rows, hits)}
+
+    @app.get("/session/{pk}/copy")
+    def session_copy(request: Request, pk: int, seq: int, scope: str = "message"):
+        """Chat view, copy menu: the source text and rendered HTML of one message
+        (a tool call comes with its output), or with scope=turn of the whole
+        exchange it belongs to: the prompt and every reply, tool steps counted
+        but left out; scope=ref is the message without its text. Each comes
+        with where it is in Claude Code's own files (session id, transcript
+        path, line number, record uuid). The page writes the clipboard."""
+        user = who(request)
+        with store.db() as conn:
+            s = _session_for(conn, pk, user)
+            if not s:
+                return JSONResponse({"error": "no such session"}, status_code=404)
+            one = "SELECT seq, ts, kind, tool, uuid, text FROM messages WHERE session_pk = ? "
+            steps = 0
+            if scope == "turn":
+                start = end = None          # from the prompt a person typed, up to the next one
+                for r in conn.execute("SELECT seq, substr(text, 1, 400) AS head FROM messages WHERE session_pk = ?"
+                                      " AND kind = 'human' AND seq <= ? ORDER BY seq DESC", (pk, seq)):
+                    if human_note(r["head"]) is None:
+                        start = r["seq"]
+                        break
+                for r in conn.execute("SELECT seq, substr(text, 1, 400) AS head FROM messages WHERE session_pk = ?"
+                                      " AND kind = 'human' AND seq > ? ORDER BY seq", (pk, seq)):
+                    if human_note(r["head"]) is None:
+                        end = r["seq"]
+                        break
+                lo, hi = (start if start is not None else 0), (end if end is not None else 1 << 60)
+                rows = conn.execute(one + "AND seq >= ? AND seq < ? AND (kind = 'assistant' OR seq = ?) ORDER BY seq",
+                                    (pk, lo, hi, start if start is not None else -1)).fetchall()
+                steps = conn.execute("SELECT COUNT(*) FROM messages WHERE session_pk = ? AND seq >= ? AND seq < ?"
+                                     " AND kind = 'tool_use'", (pk, lo, hi)).fetchone()[0]
+            else:
+                rows = conn.execute(one + "AND seq = ?", (pk, seq)).fetchall()
+                if rows and rows[0]["kind"] == "tool_use" and rows[0]["uuid"]:
+                    rows += conn.execute(one + "AND kind = 'tool_result' AND tool = ? ORDER BY seq LIMIT 1",
+                                         (pk, rows[0]["uuid"])).fetchall()
+            if not rows:
+                return JSONResponse({"error": "no such message"}, status_code=404)
+        # Where this is in Claude Code's own files: the transcript and the line of each record.
+        lines = store.locate(s["sha256"], {r["seq"]: (r["kind"], r["uuid"]) for r in rows})
+        sid, _, agent = s["session_id"].partition("/agent-")
+        rel = "%s/%s" % (re.sub(r"[^A-Za-z0-9]", "-", s["project"] or ""),
+                         "%s/subagents/agent-%s.jsonl" % (sid, agent) if agent else sid + ".jsonl")
+        here = st.local_projects / rel            # this machine's copy, when the session was made here
+        ref = {"session_id": sid, "agent": agent or None, "title": s["title"], "cwd": s["project"],
+               "path": str(here) if s["project"] and here.is_file() else "~/.claude/projects/" + rel,
+               "version": s["version"]}
+        body = scope != "ref"
+        return {"ref": ref, "steps": steps,
+                "items": [{"seq": r["seq"], "ts": fmt_ts(r["ts"]), "kind": r["kind"], "line": lines.get(r["seq"]),
+                           "uuid": r["uuid"], "tool": r["tool"] if r["kind"] == "tool_use" else None,
+                           "text": r["text"] if body else "",
+                           "html": str(render_text(r["kind"], r["text"])) if body else ""} for r in rows]}
 
     # ── bookmarks + highlights (chat view) ─────────────────────────────────
 
